@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,54 +17,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-
-interface CameraConfig {
-  id: number
-  name: string
-  zone: string
-  ipAddress: string
-  status: "online" | "offline"
-  analyticsEnabled: boolean
-}
-
-const initialCameras: CameraConfig[] = [
-  { id: 1, name: "Camera 1", zone: "Entrance 1", ipAddress: "192.168.1.101", status: "online", analyticsEnabled: true },
-  { id: 2, name: "Camera 2", zone: "Entrance 2", ipAddress: "192.168.1.102", status: "online", analyticsEnabled: true },
-  {
-    id: 3,
-    name: "Camera 3",
-    zone: "Product Area A",
-    ipAddress: "192.168.1.103",
-    status: "online",
-    analyticsEnabled: true,
-  },
-  {
-    id: 4,
-    name: "Camera 4",
-    zone: "Product Area B",
-    ipAddress: "192.168.1.104",
-    status: "online",
-    analyticsEnabled: true,
-  },
-  {
-    id: 5,
-    name: "Camera 5",
-    zone: "Product Area C",
-    ipAddress: "192.168.1.105",
-    status: "online",
-    analyticsEnabled: true,
-  },
-  { id: 6, name: "Camera 6", zone: "Cashier 1", ipAddress: "192.168.1.106", status: "online", analyticsEnabled: true },
-  { id: 7, name: "Camera 7", zone: "Cashier 2", ipAddress: "192.168.1.107", status: "online", analyticsEnabled: true },
-  {
-    id: 8,
-    name: "Camera 8",
-    zone: "Cashier 3",
-    ipAddress: "192.168.1.108",
-    status: "offline",
-    analyticsEnabled: false,
-  },
-]
+import { useCameras, useCameraOperations, type Camera as CameraType } from "@/hooks/use-cameras"
+import { toast } from "@/components/ui/use-toast"
 
 const zones = [
   "Entrance 1",
@@ -80,9 +34,12 @@ const zones = [
 ]
 
 export default function CameraSettings() {
-  const [cameras, setCameras] = useState<CameraConfig[]>(initialCameras)
-  const [editCamera, setEditCamera] = useState<CameraConfig | null>(null)
-  const [newCamera, setNewCamera] = useState<Partial<CameraConfig>>({
+  const { data: camerasData, isLoading, error, execute: refreshCameras } = useCameras()
+  const { createCamera, updateCamera, deleteCamera, isLoading: isOperationLoading } = useCameraOperations()
+
+  const [cameras, setCameras] = useState<CameraType[]>([])
+  const [editCamera, setEditCamera] = useState<CameraType | null>(null)
+  const [newCamera, setNewCamera] = useState<Partial<CameraType>>({
     name: "",
     zone: "",
     ipAddress: "",
@@ -90,45 +47,113 @@ export default function CameraSettings() {
     analyticsEnabled: true,
   })
 
-  const handleAddCamera = () => {
+  // Update local state when API data changes
+  useEffect(() => {
+    if (camerasData) {
+      setCameras(camerasData)
+    }
+  }, [camerasData])
+
+  // Show error toast if API call fails
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load cameras",
+        variant: "destructive",
+      })
+    }
+  }, [error])
+
+  const handleAddCamera = async () => {
     if (newCamera.name && newCamera.zone && newCamera.ipAddress) {
-      const newId = Math.max(...cameras.map((c) => c.id), 0) + 1
-      setCameras([
-        ...cameras,
-        {
-          id: newId,
+      try {
+        await createCamera({
           name: newCamera.name,
           zone: newCamera.zone,
           ipAddress: newCamera.ipAddress,
           status: "offline",
           analyticsEnabled: newCamera.analyticsEnabled || false,
-        },
-      ])
-      setNewCamera({
-        name: "",
-        zone: "",
-        ipAddress: "",
-        status: "offline",
-        analyticsEnabled: true,
+        } as Omit<CameraType, "id">)
+
+        refreshCameras()
+
+        setNewCamera({
+          name: "",
+          zone: "",
+          ipAddress: "",
+          status: "offline",
+          analyticsEnabled: true,
+        })
+
+        toast({
+          title: "Success",
+          description: "Camera added successfully",
+        })
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Failed to add camera",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  const handleUpdateCamera = async () => {
+    if (editCamera) {
+      try {
+        await updateCamera(editCamera.id, editCamera)
+        refreshCameras()
+        setEditCamera(null)
+
+        toast({
+          title: "Success",
+          description: "Camera updated successfully",
+        })
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Failed to update camera",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  const handleDeleteCamera = async (id: number) => {
+    try {
+      await deleteCamera(id)
+      refreshCameras()
+
+      toast({
+        title: "Success",
+        description: "Camera deleted successfully",
+      })
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to delete camera",
+        variant: "destructive",
       })
     }
   }
 
-  const handleUpdateCamera = () => {
-    if (editCamera) {
-      setCameras(cameras.map((camera) => (camera.id === editCamera.id ? editCamera : camera)))
-      setEditCamera(null)
+  const handleToggleAnalytics = async (id: number, currentValue: boolean) => {
+    try {
+      await updateCamera(id, { analyticsEnabled: !currentValue })
+      refreshCameras()
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to update camera analytics setting",
+        variant: "destructive",
+      })
     }
   }
 
-  const handleDeleteCamera = (id: number) => {
-    setCameras(cameras.filter((camera) => camera.id !== id))
-  }
-
-  const handleToggleAnalytics = (id: number) => {
-    setCameras(
-      cameras.map((camera) => (camera.id === id ? { ...camera, analyticsEnabled: !camera.analyticsEnabled } : camera)),
-    )
+  if (isLoading) {
+    return <div className="flex justify-center p-4">Loading cameras...</div>
   }
 
   return (
@@ -202,7 +227,9 @@ export default function CameraSettings() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleAddCamera}>Add Camera</Button>
+              <Button onClick={handleAddCamera} disabled={isOperationLoading}>
+                {isOperationLoading ? "Adding..." : "Add Camera"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -229,19 +256,29 @@ export default function CameraSettings() {
                 <TableCell>
                   <div className="flex items-center">
                     <div
-                      className={`h-2 w-2 rounded-full mr-2 ${camera.status === "online" ? "bg-green-500" : "bg-red-500"}`}
+                      className={`h-2 w-2 rounded-full mr-2 ${
+                        camera.status === "online"
+                          ? "bg-green-500"
+                          : camera.status === "warning"
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
+                      }`}
                     />
                     {camera.status}
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Switch checked={camera.analyticsEnabled} onCheckedChange={() => handleToggleAnalytics(camera.id)} />
+                  <Switch
+                    checked={camera.analyticsEnabled}
+                    onCheckedChange={() => handleToggleAnalytics(camera.id, camera.analyticsEnabled)}
+                    disabled={isOperationLoading}
+                  />
                 </TableCell>
                 <TableCell>
                   <div className="flex space-x-2">
                     <Dialog>
                       <DialogTrigger asChild>
-                        <Button variant="outline" size="icon">
+                        <Button variant="outline" size="icon" onClick={() => setEditCamera(camera)}>
                           <Edit className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
@@ -312,7 +349,9 @@ export default function CameraSettings() {
                               </div>
                             </div>
                             <DialogFooter>
-                              <Button onClick={handleUpdateCamera}>Save Changes</Button>
+                              <Button onClick={handleUpdateCamera} disabled={isOperationLoading}>
+                                {isOperationLoading ? "Saving..." : "Save Changes"}
+                              </Button>
                             </DialogFooter>
                           </>
                         )}
@@ -323,6 +362,7 @@ export default function CameraSettings() {
                       size="icon"
                       className="text-red-500"
                       onClick={() => handleDeleteCamera(camera.id)}
+                      disabled={isOperationLoading}
                     >
                       <Trash className="h-4 w-4" />
                     </Button>

@@ -1,17 +1,12 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useCameras, type Camera } from "@/hooks/use-cameras"
 
-type CameraStatus = "online" | "offline" | "warning"
-
-interface CameraInfo {
-  id: number
-  zone: string
-  status: CameraStatus
-}
-
-const cameras: CameraInfo[] = [
+// Fallback data in case API fails
+const fallbackCameras = [
   { id: 1, zone: "Entrance 1", status: "online" },
   { id: 2, zone: "Entrance 2", status: "online" },
   { id: 3, zone: "Product Area A", status: "online" },
@@ -31,9 +26,25 @@ const cameras: CameraInfo[] = [
 ]
 
 export default function CameraStatusGrid() {
+  const { data, isLoading, error } = useCameras()
+  const [cameraData, setCameraData] = useState<Camera[]>([])
+
+  useEffect(() => {
+    if (data) {
+      setCameraData(data)
+    } else {
+      // Use fallback data if API fails
+      setCameraData(fallbackCameras as Camera[])
+    }
+  }, [data])
+
+  if (isLoading) {
+    return <div className="text-center p-4">Loading camera status...</div>
+  }
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-      {cameras.map((camera) => (
+      {cameraData.map((camera) => (
         <div key={camera.id} className="border rounded-md p-2 flex flex-col">
           <div className="text-xs font-medium truncate">{camera.zone}</div>
           <div className="flex items-center justify-between mt-1">
