@@ -4,11 +4,13 @@ FROM node:18-alpine AS builder
 # 2. Set working directory
 WORKDIR /app
 
-# 3. Install deps
-COPY package*.json ./
+# 3. Only copy dependency files first
+COPY package.json package-lock.json ./
+
+# 4. Install dependencies
 RUN npm install --legacy-peer-deps
 
-# 4. Copy source code
+# 5. Copy source code
 COPY . .
 
 # 5. Build the app

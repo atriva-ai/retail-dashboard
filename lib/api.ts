@@ -116,6 +116,12 @@ export const apiClient = {
   },
 }
 
+// Fetch store name from backend
+export async function fetchStoreName() {
+  const response = await apiClient.get<{ name: string }>("/api/store")
+  return response.name
+}
+
 /**
  * API error handling
  */

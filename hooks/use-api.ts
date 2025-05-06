@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { apiClient } from "@/lib/api"
 
 interface ApiState<T> {
@@ -31,16 +31,29 @@ export function useApi<T, P = void>(
     error: null,
   })
 
+  const isMounted = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
+
   const execute = useCallback(
     async (params?: P): Promise<T | null> => {
+      if (!isMounted.current) return null
       setState((prev) => ({ ...prev, isLoading: true, error: null }))
       try {
         const data = await apiMethod(params as P)
-        setState({ data, isLoading: false, error: null })
+        if (isMounted.current) {
+          setState({ data, isLoading: false, error: null })
+        }
         return data
       } catch (error) {
         const apiError = error instanceof Error ? error : new Error("Unknown error occurred")
-        setState({ data: null, isLoading: false, error: apiError })
+        if (isMounted.current) {
+          setState({ data: null, isLoading: false, error: apiError })
+        }
         return null
       }
     },
@@ -48,15 +61,16 @@ export function useApi<T, P = void>(
   )
 
   const reset = useCallback(() => {
-    setState({ data: null, isLoading: false, error: null })
+    if (isMounted.current) {
+      setState({ data: null, isLoading: false, error: null })
+    }
   }, [])
 
-  // Execute immediately if requested
-  useState(() => {
+  useEffect(() => {
     if (immediate) {
       execute(initialParams as P)
     }
-  })
+  }, [immediate, initialParams, execute])
 
   return {
     ...state,

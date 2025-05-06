@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -17,6 +18,11 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from "./sidebar-provider"
 import { Badge } from "./ui/badge"
+import { useStoreName } from "@/hooks/use-store-name"
+// edited for adding store name input
+import { useApi } from "@/hooks/use-api"
+import { apiClient } from "@/lib/api" // where API call wrappers go
+import { Input } from "@/components/ui/input"
 
 const navItems = [
   {
@@ -53,9 +59,40 @@ const navItems = [
   },
 ]
 
+// -- get and post functions for store name
+async function fetchStore() {
+  const response = await apiClient.get<{ name: string }>("/api/store")
+  return response
+}
+
+async function updateStoreName(data: { name: string }) {
+  const response = await apiClient.post<{ name: string }>("/api/store", data)
+  return response
+}
+
 export default function Sidebar() {
   const pathname = usePathname()
   const { isOpen, toggleSidebar } = useSidebar()
+
+  // adding loading and saving store name
+  const { data, isLoading, execute: loadStore } = useApi(fetchStore, true)
+  const { execute: saveStore } = useApi(updateStoreName)
+
+  const [editing, setEditing] = useState(false)
+  const [storeName, setStoreName] = useState("")
+
+  useEffect(() => {
+    if (data?.name) {
+      setStoreName(data.name)
+    }
+  }, [data])
+
+  const handleSave = async () => {
+    const result = await saveStore({ name: storeName })
+    if (result) {
+      setEditing(false)
+    }
+  }
 
   return (
     <div
@@ -68,7 +105,7 @@ export default function Sidebar() {
             isOpen ? "opacity-100" : "opacity-0 hidden",
           )}
         >
-          Dashboard
+          Dashboard {storeName ? `- ${storeName}` : ""}
         </h1>
         <Button variant="ghost" size="icon" onClick={toggleSidebar}>
           {isOpen ? <ChevronLeft /> : <ChevronRight />}
@@ -105,7 +142,26 @@ export default function Sidebar() {
           </div>
           <div className={cn("space-y-1", !isOpen && "hidden")}>
             <p className="text-sm font-medium">Analytics Pro</p>
-            <p className="text-xs text-muted-foreground">Store #1024</p>
+            {editing ? (
+              <>
+                <Input
+                  className="text-xs"
+                  value={storeName}
+                  onChange={(e) => setStoreName(e.target.value)}
+                />
+                <Button size="sm" onClick={handleSave} disabled={isLoading}>
+                  Save
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">{storeName || "Loading..."}</p>
+                <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+              </>
+            )}
+
           </div>
         </div>
       </div>
