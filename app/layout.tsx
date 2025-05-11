@@ -1,4 +1,3 @@
-import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
@@ -12,18 +11,19 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Retail AI Analytics Dashboard",
   description: "Camera analytics system for retail stores",
-    generator: 'v0.dev'
+    generator: 'Atriva'
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
-    <html lang="en">
+    <html lang="en" className="light" style={{ colorScheme: "light" }}>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        {/* ThemeProvider can now apply class to <body>, not html */}
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <SidebarProvider>
             <div className="flex flex-col h-screen overflow-hidden">
               <Header />

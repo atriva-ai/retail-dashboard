@@ -45,12 +45,14 @@ export function useApi<T, P = void>(
       setState((prev) => ({ ...prev, isLoading: true, error: null }))
       try {
         const data = await apiMethod(params as P)
+        console.log('✅ API call successful:', data);
         if (isMounted.current) {
           setState({ data, isLoading: false, error: null })
         }
         return data
       } catch (error) {
         const apiError = error instanceof Error ? error : new Error("Unknown error occurred")
+        console.error('❌ API call failed:', apiError);
         if (isMounted.current) {
           setState({ data: null, isLoading: false, error: apiError })
         }

@@ -13,6 +13,10 @@ RUN npm install --legacy-peer-deps
 # 5. Copy source code
 COPY . .
 
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+# RUN echo "API URL is $NEXT_PUBLIC_API_BASE_URL"
+
 # 5. Build the app
 RUN npm run build
 
