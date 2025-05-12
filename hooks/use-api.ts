@@ -68,11 +68,20 @@ export function useApi<T, P = void>(
     }
   }, [])
 
+  /* guarding immediate with a ref so it doesn't re-trigger every time execute changes */
+  /*
   useEffect(() => {
     if (immediate) {
       execute(initialParams as P)
     }
   }, [immediate, initialParams, execute])
+  */
+  useEffect(() => {
+    if (immediate && initialParams !== undefined) {
+      execute(initialParams)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount
 
   return {
     ...state,
@@ -108,7 +117,10 @@ export function usePaginatedApi<T>(endpoint: string, pageSize = 10) {
     [endpoint, pageSize],
   )
 
-  const { data, isLoading, error, execute } = useApi<T[]>(() => fetchPage(page), true)
+  // causing maximum update depth exceeded error
+  //const { data, isLoading, error, execute } = useApi<T[]>(() => fetchPage(page), true)
+  const fetchCurrentPage = useCallback(() => fetchPage(page), [fetchPage, page])
+  const { data, isLoading, error, execute } = useApi<T[]>(fetchCurrentPage, true)
 
   const goToPage = useCallback(
     (pageNum: number) => {

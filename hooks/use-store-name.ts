@@ -1,6 +1,7 @@
 // hooks/use-store-name.ts
 // Called by Header in server, not do "use client"
 
+/*
 export async function fetchStoreName(): Promise<string> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -23,3 +24,4 @@ export async function fetchStoreName(): Promise<string> {
     return 'Unknown Store';
   }
 }
+*/
