@@ -13,20 +13,24 @@ RUN npm install --legacy-peer-deps
 # 5. Copy source code
 COPY . .
 
-ARG NEXT_PUBLIC_API_BASE_URL
-ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
-# RUN echo "API URL is $NEXT_PUBLIC_API_BASE_URL"
+# Build arguments
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
-# 5. Build the app
+# Debug environment variables
+RUN echo "API URL is $NEXT_PUBLIC_API_URL"
+
+# 6. Build the app
 RUN npm run build
 
-# 6. Final stage for production server
+# 7. Final stage for production server
 FROM node:18-alpine AS runner
 
 WORKDIR /app
 
 # Set env to production
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # Copy built output from builder
 COPY --from=builder /app/public ./public

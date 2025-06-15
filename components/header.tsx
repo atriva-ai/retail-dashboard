@@ -1,29 +1,21 @@
+"use client"
+import { useEffect, useState } from "react";
 import { BarChart3 } from "lucide-react";
 import { format } from "date-fns";
+import { useSettings } from "@/hooks/use-settings"
 
-export default async function Header() {
-  // Server-side date formatting
-  const today = new Date()
-  const formattedDate = format(today, "yyyy-MM-dd") // Deterministic format, safe for hydration
+export default function Header() {
+  const [now, setNow] = useState("");
+  const { settings, refreshSettings } = useSettings();
 
-  // Fetch store name from backend API
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://backend:8000"
-  let storeName = "Unknown Store"
+  useEffect(() => {
+    setNow(format(new Date(), "yyyy-MM-dd"));
+  }, []);
 
-  try {
-    const res = await fetch(`${baseUrl}/api/store`, {
-      cache: "force-cache", // You can adjust to 'force-cache' or 'default' if needed
-    })
-
-    if (res.ok) {
-      const data = await res.json()
-      storeName = data.name || storeName
-    } else {
-      console.error("Failed to fetch store name:", res.statusText)
-    }
-  } catch (error) {
-    console.error("❌ Error fetching store name:", error)
-  }
+  // Refresh settings when component mounts
+  useEffect(() => {
+    refreshSettings();
+  }, [refreshSettings]);
 
   return (
     <header className="h-16 border-b flex items-center justify-between px-4 md:px-6 bg-background">
@@ -33,11 +25,11 @@ export default async function Header() {
         </div>
         <div>
           <h1 className="text-xl font-bold">
-            Retail AI Analytics Dashboard - {storeName}
+            Retail AI Analytics Dashboard - {settings?.store_name || "Loading..."}
           </h1>
         </div>
       </div>
-      <div className="text-sm text-muted-foreground">{formattedDate}</div>
+      <div className="text-sm text-muted-foreground">{now}</div>
     </header>
   )
 }

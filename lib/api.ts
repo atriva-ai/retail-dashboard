@@ -3,7 +3,11 @@
  */
 
 // API base URL - replace with your actual API endpoint
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.example.com"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+// Debug log the API base URL
+console.log('🔧 API Base URL:', API_BASE_URL)
+console.log('🔧 Environment:', process.env.NODE_ENV)
 
 // Default request headers
 const defaultHeaders = {
@@ -36,6 +40,7 @@ export async function fetchWithTimeout(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('API Error:', errorData)
       throw new Error(errorData.message || `API error: ${response.status}`)
     }
 
@@ -78,7 +83,9 @@ export const apiClient = {
    * POST request
    */
   async post<T>(endpoint: string, data?: any): Promise<T> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
+    const url = `${API_BASE_URL}${endpoint}`
+
+    const response = await fetchWithTimeout(url, {
       method: "POST",
       headers: defaultHeaders,
       credentials: "include",
@@ -92,7 +99,9 @@ export const apiClient = {
    * PUT request
    */
   async put<T>(endpoint: string, data?: any): Promise<T> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
+    const url = `${API_BASE_URL}${endpoint}`
+
+    const response = await fetchWithTimeout(url, {
       method: "PUT",
       headers: defaultHeaders,
       credentials: "include",
@@ -106,7 +115,9 @@ export const apiClient = {
    * DELETE request
    */
   async delete<T>(endpoint: string): Promise<T> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
+    const url = `${API_BASE_URL}${endpoint}`
+
+    const response = await fetchWithTimeout(url, {
       method: "DELETE",
       headers: defaultHeaders,
       credentials: "include",
@@ -118,7 +129,7 @@ export const apiClient = {
 
 // Fetch store name from backend
 export async function fetchStoreName() {
-  const response = await apiClient.get<{ name: string }>("/api/store")
+  const response = await apiClient.get<{ name: string }>("/api/v1/store")
   return response.name
 }
 
