@@ -17,80 +17,70 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { useCameras, useCameraOperations, type Camera as CameraType } from "@/hooks/use-cameras"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
+import { apiClient } from "@/lib/api"
 
-const zones = [
-  "Entrance 1",
-  "Entrance 2",
-  "Product Area A",
-  "Product Area B",
-  "Product Area C",
-  "Cashier 1",
-  "Cashier 2",
-  "Cashier 3",
-  "Exit 1",
-  "Exit 2",
-]
+interface Camera {
+  id: number
+  name: string
+  rtsp_url: string
+  location: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
 
 export default function CameraSettings() {
-  const { data: camerasData, isLoading, error, execute: refreshCameras } = useCameras()
-  const { createCamera, updateCamera, deleteCamera, isLoading: isOperationLoading } = useCameraOperations()
-
-  const [cameras, setCameras] = useState<CameraType[]>([])
-  const [editCamera, setEditCamera] = useState<CameraType | null>(null)
-  const [newCamera, setNewCamera] = useState<Partial<CameraType>>({
+  const [cameras, setCameras] = useState<Camera[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editCamera, setEditCamera] = useState<Camera | null>(null)
+  const [newCamera, setNewCamera] = useState<Partial<Camera>>({
     name: "",
-    zone: "",
-    ipAddress: "",
-    status: "offline",
-    analyticsEnabled: true,
+    rtsp_url: "",
+    location: "",
+    is_active: true,
   })
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const { toast } = useToast()
 
-  // Update local state when API data changes
-  useEffect(() => {
-    if (camerasData) {
-      setCameras(camerasData)
-    }
-  }, [camerasData])
-
-  // Show error toast if API call fails
-  useEffect(() => {
-    if (error) {
+  const fetchCameras = async () => {
+    try {
+      const response = await apiClient.get<Camera[]>('/api/v1/cameras')
+      setCameras(response || [])
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message || "Failed to load cameras",
+        description: "Failed to fetch cameras",
         variant: "destructive",
       })
+      setCameras([])
+    } finally {
+      setLoading(false)
     }
-  }, [error])
+  }
+
+  useEffect(() => {
+    fetchCameras()
+  }, [])
 
   const handleAddCamera = async () => {
-    if (newCamera.name && newCamera.zone && newCamera.ipAddress) {
+    if (newCamera.name && newCamera.rtsp_url) {
       try {
-        await createCamera({
-          name: newCamera.name,
-          zone: newCamera.zone,
-          ipAddress: newCamera.ipAddress,
-          status: "offline",
-          analyticsEnabled: newCamera.analyticsEnabled || false,
-        } as Omit<CameraType, "id">)
-
-        refreshCameras()
-
-        setNewCamera({
-          name: "",
-          zone: "",
-          ipAddress: "",
-          status: "offline",
-          analyticsEnabled: true,
-        })
-
+        await apiClient.post('/api/v1/cameras', newCamera)
         toast({
           title: "Success",
           description: "Camera added successfully",
         })
-      } catch (err) {
+        setNewCamera({
+          name: "",
+          rtsp_url: "",
+          location: "",
+          is_active: true,
+        })
+        setIsAddDialogOpen(false)
+        fetchCameras()
+      } catch (error) {
         toast({
           title: "Error",
           description: "Failed to add camera",
@@ -103,15 +93,15 @@ export default function CameraSettings() {
   const handleUpdateCamera = async () => {
     if (editCamera) {
       try {
-        await updateCamera(editCamera.id, editCamera)
-        refreshCameras()
-        setEditCamera(null)
-
+        await apiClient.put(`/api/v1/cameras/${editCamera.id}`, editCamera)
         toast({
           title: "Success",
           description: "Camera updated successfully",
         })
-      } catch (err) {
+        setEditCamera(null)
+        setIsEditDialogOpen(false)
+        fetchCameras()
+      } catch (error) {
         toast({
           title: "Error",
           description: "Failed to update camera",
@@ -123,14 +113,13 @@ export default function CameraSettings() {
 
   const handleDeleteCamera = async (id: number) => {
     try {
-      await deleteCamera(id)
-      refreshCameras()
-
+      await apiClient.delete(`/api/v1/cameras/${id}`)
       toast({
         title: "Success",
         description: "Camera deleted successfully",
       })
-    } catch (err) {
+      fetchCameras()
+    } catch (error) {
       toast({
         title: "Error",
         description: "Failed to delete camera",
@@ -139,28 +128,33 @@ export default function CameraSettings() {
     }
   }
 
-  const handleToggleAnalytics = async (id: number, currentValue: boolean) => {
+  const handleToggleActive = async (id: number, currentValue: boolean) => {
     try {
-      await updateCamera(id, { analyticsEnabled: !currentValue })
-      refreshCameras()
-    } catch (err) {
+      await apiClient.put(`/api/v1/cameras/${id}`, { is_active: !currentValue })
+      fetchCameras()
+    } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to update camera analytics setting",
+        description: "Failed to update camera status",
         variant: "destructive",
       })
     }
   }
 
-  if (isLoading) {
+  const handleEditClick = (camera: Camera) => {
+    setEditCamera(camera)
+    setIsEditDialogOpen(true)
+  }
+
+  if (loading) {
     return <div className="flex justify-center p-4">Loading cameras...</div>
   }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">Cameras ({cameras.length})</h3>
-        <Dialog>
+        <h3 className="text-lg font-medium">Cameras ({cameras?.length || 0})</h3>
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -185,51 +179,41 @@ export default function CameraSettings() {
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="zone" className="text-right">
-                  Zone
-                </Label>
-                <Select value={newCamera.zone} onValueChange={(value) => setNewCamera({ ...newCamera, zone: value })}>
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select zone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {zones.map((zone) => (
-                      <SelectItem key={zone} value={zone}>
-                        {zone}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="ipAddress" className="text-right">
-                  IP Address
+                <Label htmlFor="rtsp_url" className="text-right">
+                  RTSP URL
                 </Label>
                 <Input
-                  id="ipAddress"
-                  value={newCamera.ipAddress}
-                  onChange={(e) => setNewCamera({ ...newCamera, ipAddress: e.target.value })}
+                  id="rtsp_url"
+                  value={newCamera.rtsp_url}
+                  onChange={(e) => setNewCamera({ ...newCamera, rtsp_url: e.target.value })}
                   className="col-span-3"
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="analytics" className="text-right">
-                  Analytics
+                <Label htmlFor="location" className="text-right">
+                  Location
                 </Label>
-                <div className="flex items-center space-x-2 col-span-3">
-                  <Switch
-                    id="analytics"
-                    checked={newCamera.analyticsEnabled}
-                    onCheckedChange={(checked) => setNewCamera({ ...newCamera, analyticsEnabled: checked })}
-                  />
-                  <Label htmlFor="analytics">Enable analytics for this camera</Label>
-                </div>
+                <Input
+                  id="location"
+                  value={newCamera.location || ""}
+                  onChange={(e) => setNewCamera({ ...newCamera, location: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="is_active" className="text-right">
+                  Active
+                </Label>
+                <Switch
+                  id="is_active"
+                  checked={newCamera.is_active}
+                  onCheckedChange={(checked) => setNewCamera({ ...newCamera, is_active: checked })}
+                  className="col-span-3"
+                />
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleAddCamera} disabled={isOperationLoading}>
-                {isOperationLoading ? "Adding..." : "Add Camera"}
-              </Button>
+              <Button onClick={handleAddCamera}>Add Camera</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -240,153 +224,101 @@ export default function CameraSettings() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Zone</TableHead>
-              <TableHead>IP Address</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>RTSP URL</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Analytics</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {cameras.map((camera) => (
+            {cameras?.map((camera) => (
               <TableRow key={camera.id}>
-                <TableCell className="font-medium">{camera.name}</TableCell>
-                <TableCell>{camera.zone}</TableCell>
-                <TableCell>{camera.ipAddress}</TableCell>
-                <TableCell>
-                  <div className="flex items-center">
-                    <div
-                      className={`h-2 w-2 rounded-full mr-2 ${
-                        camera.status === "online"
-                          ? "bg-green-500"
-                          : camera.status === "warning"
-                            ? "bg-yellow-500"
-                            : "bg-red-500"
-                      }`}
-                    />
-                    {camera.status}
-                  </div>
-                </TableCell>
+                <TableCell>{camera.name}</TableCell>
+                <TableCell>{camera.location || "Not specified"}</TableCell>
+                <TableCell className="max-w-[200px] truncate">{camera.rtsp_url}</TableCell>
                 <TableCell>
                   <Switch
-                    checked={camera.analyticsEnabled}
-                    onCheckedChange={() => handleToggleAnalytics(camera.id, camera.analyticsEnabled)}
-                    disabled={isOperationLoading}
+                    checked={camera.is_active}
+                    onCheckedChange={() => handleToggleActive(camera.id, camera.is_active)}
                   />
                 </TableCell>
-                <TableCell>
-                  <div className="flex space-x-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="icon" onClick={() => setEditCamera(camera)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        {editCamera && (
-                          <>
-                            <DialogHeader>
-                              <DialogTitle>Edit Camera</DialogTitle>
-                              <DialogDescription>Update the camera details.</DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="edit-name" className="text-right">
-                                  Name
-                                </Label>
-                                <Input
-                                  id="edit-name"
-                                  value={editCamera.name}
-                                  onChange={(e) => setEditCamera({ ...editCamera, name: e.target.value })}
-                                  className="col-span-3"
-                                />
-                              </div>
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="edit-zone" className="text-right">
-                                  Zone
-                                </Label>
-                                <Select
-                                  value={editCamera.zone}
-                                  onValueChange={(value) => setEditCamera({ ...editCamera, zone: value })}
-                                >
-                                  <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Select zone" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {zones.map((zone) => (
-                                      <SelectItem key={zone} value={zone}>
-                                        {zone}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="edit-ipAddress" className="text-right">
-                                  IP Address
-                                </Label>
-                                <Input
-                                  id="edit-ipAddress"
-                                  value={editCamera.ipAddress}
-                                  onChange={(e) => setEditCamera({ ...editCamera, ipAddress: e.target.value })}
-                                  className="col-span-3"
-                                />
-                              </div>
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="edit-analytics" className="text-right">
-                                  Analytics
-                                </Label>
-                                <div className="flex items-center space-x-2 col-span-3">
-                                  <Switch
-                                    id="edit-analytics"
-                                    checked={editCamera.analyticsEnabled}
-                                    onCheckedChange={(checked) =>
-                                      setEditCamera({ ...editCamera, analyticsEnabled: checked })
-                                    }
-                                  />
-                                  <Label htmlFor="edit-analytics">Enable analytics for this camera</Label>
-                                </div>
-                              </div>
-                            </div>
-                            <DialogFooter>
-                              <Button onClick={handleUpdateCamera} disabled={isOperationLoading}>
-                                {isOperationLoading ? "Saving..." : "Save Changes"}
-                              </Button>
-                            </DialogFooter>
-                          </>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="text-red-500"
-                      onClick={() => handleDeleteCamera(camera.id)}
-                      disabled={isOperationLoading}
-                    >
-                      <Trash className="h-4 w-4" />
-                    </Button>
-                  </div>
+                <TableCell className="text-right">
+                  <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={() => handleEditClick(camera)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Edit Camera</DialogTitle>
+                        <DialogDescription>Update the camera details.</DialogDescription>
+                      </DialogHeader>
+                      {editCamera && (
+                        <div className="grid gap-4 py-4">
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="edit-name" className="text-right">
+                              Name
+                            </Label>
+                            <Input
+                              id="edit-name"
+                              value={editCamera.name}
+                              onChange={(e) => setEditCamera({ ...editCamera, name: e.target.value })}
+                              className="col-span-3"
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="edit-rtsp" className="text-right">
+                              RTSP URL
+                            </Label>
+                            <Input
+                              id="edit-rtsp"
+                              value={editCamera.rtsp_url}
+                              onChange={(e) => setEditCamera({ ...editCamera, rtsp_url: e.target.value })}
+                              className="col-span-3"
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="edit-location" className="text-right">
+                              Location
+                            </Label>
+                            <Input
+                              id="edit-location"
+                              value={editCamera.location || ""}
+                              onChange={(e) => setEditCamera({ ...editCamera, location: e.target.value })}
+                              className="col-span-3"
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="edit-active" className="text-right">
+                              Active
+                            </Label>
+                            <Switch
+                              id="edit-active"
+                              checked={editCamera.is_active}
+                              onCheckedChange={(checked) => setEditCamera({ ...editCamera, is_active: checked })}
+                              className="col-span-3"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <DialogFooter>
+                        <Button onClick={handleUpdateCamera}>Save Changes</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDeleteCamera(camera.id)}
+                  >
+                    <Trash className="h-4 w-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </div>
-
-      <div className="bg-muted p-4 rounded-md">
-        <div className="flex items-start space-x-3">
-          <Camera className="h-5 w-5 mt-0.5 text-muted-foreground" />
-          <div>
-            <h4 className="font-medium">Camera Configuration Tips</h4>
-            <ul className="text-sm text-muted-foreground mt-1 list-disc pl-4 space-y-1">
-              <li>Ensure cameras have a static IP address for reliable connectivity</li>
-              <li>Position cameras to maximize coverage of key areas</li>
-              <li>For optimal analytics performance, maintain good lighting conditions</li>
-              <li>Regularly check camera status to ensure continuous monitoring</li>
-            </ul>
-          </div>
-        </div>
       </div>
     </div>
   )
