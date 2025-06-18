@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { AlertCircle, Users, Clock, ArrowRightLeft, Video, X } from "lucide-react"
+import { AlertCircle, Plus, Edit, Trash, Users, Clock, UserCheck } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   Dialog,
@@ -17,180 +18,225 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { apiClient } from "@/lib/api"
-
-interface Camera {
-  id: number
-  name: string
-  rtsp_url: string
-  location: string | null
-  is_active: boolean
-}
-
-interface AnalyticsConfig {
-  id: string
-  name: string
-  enabled: boolean
-  cameras: number[]
-}
-
-interface LineCrossingConfig {
-  cameraId: number
-  lines: Array<{
-    id: string
-    startX: number
-    startY: number
-    endX: number
-    endY: number
-  }>
-}
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/components/ui/use-toast"
+import { useAnalyticsManagement, type Analytics } from "@/hooks/use-analytics-management"
+import { useCameras } from "@/hooks/use-cameras"
+import { getAllAnalyticsTypes, type AnalyticsTypeConfig } from "@/lib/constants/analytics"
 
 export default function AnalyticsSettings() {
-  const [cameras, setCameras] = useState<Camera[]>([])
-  const [analytics, setAnalytics] = useState<AnalyticsConfig[]>([
-    {
-      id: "people-counting",
-      name: "People Counting",
-      enabled: false,
-      cameras: [],
-    },
-    {
-      id: "dwell-time",
-      name: "Dwell Time Analysis",
-      enabled: false,
-      cameras: [],
-    },
-    {
-      id: "line-crossing",
-      name: "Line Crossing Traffic",
-      enabled: false,
-      cameras: [],
-    },
-  ])
-  const [lineCrossingConfig, setLineCrossingConfig] = useState<LineCrossingConfig[]>([])
-  const [isLineDrawingOpen, setIsLineDrawingOpen] = useState(false)
-  const [selectedCameraForLine, setSelectedCameraForLine] = useState<Camera | null>(null)
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [currentLine, setCurrentLine] = useState<{ startX: number; startY: number } | null>(null)
-  const [lines, setLines] = useState<Array<{ id: string; startX: number; startY: number; endX: number; endY: number }>>([])
+  const { analytics, analyticsTypes, loading, error, createAnalytics, updateAnalytics, deleteAnalytics, addAnalyticsToCamera, removeAnalyticsFromCamera, getCameraAnalytics } = useAnalyticsManagement()
+  const { data: cameras = [] } = useCameras()
+  const { toast } = useToast()
+  
+  // Dialog states for analytics management
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingAnalytics, setEditingAnalytics] = useState<Analytics | null>(null)
+  const [newAnalytics, setNewAnalytics] = useState({
+    name: "",
+    type: "",
+    config: {},
+    is_active: true
+  })
 
-  // Fetch cameras on component mount
+  // State to track camera assignments for each analytics
+  const [cameraAssignments, setCameraAssignments] = useState<Record<number, number[]>>({})
+
+  const predefinedTypes = getAllAnalyticsTypes()
+
+  // Fetch camera assignments for all analytics
+  const fetchCameraAssignments = async () => {
+    const assignments: Record<number, number[]> = {}
+    
+    for (const analytic of analytics) {
+      try {
+        const cameraAnalytics = await getCameraAnalytics(analytic.id)
+        assignments[analytic.id] = cameraAnalytics.map((ca: Analytics) => ca.id)
+      } catch (error) {
+        console.error(`Error fetching camera assignments for analytics ${analytic.id}:`, error)
+        assignments[analytic.id] = []
+      }
+    }
+    
+    setCameraAssignments(assignments)
+  }
+
+  // Fetch camera assignments when analytics change
   useEffect(() => {
-    fetchCameras()
-  }, [])
+    if (analytics.length > 0) {
+      fetchCameraAssignments()
+    }
+  }, [analytics])
 
-  const fetchCameras = async () => {
-    try {
-      const response = await apiClient.get<Camera[]>('/api/v1/cameras')
-      setCameras(response || [])
-    } catch (error) {
-      console.error('Failed to fetch cameras:', error)
+  const getAnalyticsIcon = (type: string) => {
+    switch (type) {
+      case "people_counting":
+        return <Users className="h-5 w-5" />
+      case "dwell_time":
+        return <Clock className="h-5 w-5" />
+      case "demographic":
+        return <UserCheck className="h-5 w-5" />
+      default:
+        return <AlertCircle className="h-5 w-5" />
     }
   }
 
-  const handleAnalyticsToggle = (id: string) => {
-    setAnalytics(analytics.map((analytic) => 
-      analytic.id === id ? { ...analytic, enabled: !analytic.enabled } : analytic
-    ))
-  }
-
-  const handleCameraToggle = (analyticsId: string, cameraId: number) => {
-    setAnalytics(analytics.map((analytic) => {
-      if (analytic.id === analyticsId) {
-        const cameras = analytic.cameras.includes(cameraId)
-          ? analytic.cameras.filter(id => id !== cameraId)
-          : [...analytic.cameras, cameraId]
-        
-        return { ...analytic, cameras }
-      }
-      return analytic
-    }))
-  }
-
-  const handleLineCrossingSetup = (camera: Camera) => {
-    setSelectedCameraForLine(camera)
-    setIsLineDrawingOpen(true)
-    // Load existing lines for this camera
-    const existingConfig = lineCrossingConfig.find(config => config.cameraId === camera.id)
-    setLines(existingConfig?.lines || [])
-  }
-
-  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) {
-      const rect = event.currentTarget.getBoundingClientRect()
-      const x = event.clientX - rect.left
-      const y = event.clientY - rect.top
-      setCurrentLine({ startX: x, startY: y })
-      setIsDrawing(true)
-    } else {
-      if (currentLine) {
-        const rect = event.currentTarget.getBoundingClientRect()
-        const x = event.clientX - rect.left
-        const y = event.clientY - rect.top
-        const newLine = {
-          id: `line-${Date.now()}`,
-          startX: currentLine.startX,
-          startY: currentLine.startY,
-          endX: x,
-          endY: y,
-        }
-        setLines([...lines, newLine])
-        setCurrentLine(null)
-        setIsDrawing(false)
-      }
+  const getAnalyticsColor = (type: string) => {
+    switch (type) {
+      case "people_counting":
+        return "text-blue-600"
+      case "dwell_time":
+        return "text-green-600"
+      case "demographic":
+        return "text-purple-600"
+      default:
+        return "text-gray-600"
     }
   }
 
-  const handleCanvasMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDrawing && currentLine) {
-      const canvas = event.currentTarget
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        // Redraw all lines
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        lines.forEach(line => {
-          ctx.beginPath()
-          ctx.moveTo(line.startX, line.startY)
-          ctx.lineTo(line.endX, line.endY)
-          ctx.strokeStyle = '#00ff00'
-          ctx.lineWidth = 2
-          ctx.stroke()
-        })
-        
-        // Draw current line being drawn
-        const rect = canvas.getBoundingClientRect()
-        const x = event.clientX - rect.left
-        const y = event.clientY - rect.top
-        ctx.beginPath()
-        ctx.moveTo(currentLine.startX, currentLine.startY)
-        ctx.lineTo(x, y)
-        ctx.strokeStyle = '#ff0000'
-        ctx.lineWidth = 2
-        ctx.stroke()
-      }
-    }
+  const isCameraAssigned = (analyticsId: number, cameraId: number) => {
+    return cameraAssignments[analyticsId]?.includes(cameraId) || false
   }
 
-  const handleSaveLines = () => {
-    if (selectedCameraForLine) {
-      setLineCrossingConfig(prev => {
-        const filtered = prev.filter(config => config.cameraId !== selectedCameraForLine.id)
-        return [...filtered, { cameraId: selectedCameraForLine.id, lines }]
+  const handleAddAnalytics = async () => {
+    if (newAnalytics.name && newAnalytics.type) {
+      // Get default config for the selected type
+      const typeConfig = predefinedTypes.find(t => t.type === newAnalytics.type)
+      const config = typeConfig ? typeConfig.defaultConfig : {}
+      
+      const result = await createAnalytics({
+        ...newAnalytics,
+        config
       })
-      setIsLineDrawingOpen(false)
-      setSelectedCameraForLine(null)
-      setLines([])
-      setCurrentLine(null)
-      setIsDrawing(false)
+      if (result) {
+        toast({
+          title: "Success",
+          description: "Analytics configuration created successfully",
+        })
+        setNewAnalytics({ name: "", type: "", config: {}, is_active: true })
+        setIsAddDialogOpen(false)
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to create analytics configuration",
+          variant: "destructive",
+        })
+      }
     }
   }
 
-  const handleDeleteLine = (lineId: string) => {
-    setLines(lines.filter(line => line.id !== lineId))
+  const handleUpdateAnalytics = async () => {
+    if (editingAnalytics) {
+      const result = await updateAnalytics(editingAnalytics.id, {
+        name: editingAnalytics.name,
+        type: editingAnalytics.type,
+        config: editingAnalytics.config,
+        is_active: editingAnalytics.is_active
+      })
+      if (result) {
+        toast({
+          title: "Success",
+          description: "Analytics configuration updated successfully",
+        })
+        setEditingAnalytics(null)
+        setIsEditDialogOpen(false)
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to update analytics configuration",
+          variant: "destructive",
+        })
+      }
+    }
   }
 
-  const getCameraName = (cameraId: number) => {
-    return cameras.find(camera => camera.id === cameraId)?.name || `Camera ${cameraId}`
+  const handleDeleteAnalytics = async (id: number) => {
+    const result = await deleteAnalytics(id)
+    if (result) {
+      toast({
+        title: "Success",
+        description: "Analytics configuration deleted successfully",
+      })
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to delete analytics configuration",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleAnalyticsToggle = async (analyticsItem: Analytics) => {
+    const result = await updateAnalytics(analyticsItem.id, {
+      is_active: !analyticsItem.is_active
+    })
+    if (result) {
+      toast({
+        title: "Success",
+        description: `Analytics ${analyticsItem.is_active ? 'disabled' : 'enabled'} successfully`,
+      })
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to update analytics status",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleCameraToggle = async (analyticsId: number, cameraId: number) => {
+    try {
+      const isCurrentlyAssigned = isCameraAssigned(analyticsId, cameraId)
+      
+      if (isCurrentlyAssigned) {
+        const result = await removeAnalyticsFromCamera(cameraId, analyticsId)
+        if (result) {
+          // Update local state
+          setCameraAssignments(prev => ({
+            ...prev,
+            [analyticsId]: prev[analyticsId]?.filter(id => id !== cameraId) || []
+          }))
+          toast({
+            title: "Success",
+            description: "Analytics removed from camera",
+          })
+        }
+      } else {
+        const result = await addAnalyticsToCamera(cameraId, analyticsId)
+        if (result) {
+          // Update local state
+          setCameraAssignments(prev => ({
+            ...prev,
+            [analyticsId]: [...(prev[analyticsId] || []), cameraId]
+          }))
+          toast({
+            title: "Success",
+            description: "Analytics added to camera",
+          })
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update camera assignment",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (loading) {
+    return <div className="flex justify-center p-4">Loading analytics...</div>
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )
   }
 
   return (
@@ -199,135 +245,195 @@ export default function AnalyticsSettings() {
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Analytics Engine Configuration</AlertTitle>
         <AlertDescription>
-          Configure analytics engines and select cameras for each analysis type. Enable the engines you need and assign cameras to them.
+          Configure analytics engines and assign them to cameras. Each analytics type can be enabled/disabled and assigned to multiple cameras.
         </AlertDescription>
       </Alert>
 
-      <div className="space-y-4">
-        {analytics.map((analytic) => (
-          <Card key={analytic.id}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  {analytic.id === "people-counting" && <Users className="h-5 w-5" />}
-                  {analytic.id === "dwell-time" && <Clock className="h-5 w-5" />}
-                  {analytic.id === "line-crossing" && <ArrowRightLeft className="h-5 w-5" />}
-                  <CardTitle className="text-lg">{analytic.name}</CardTitle>
-                </div>
-                <Switch 
-                  checked={analytic.enabled} 
-                  onCheckedChange={() => handleAnalyticsToggle(analytic.id)} 
-                />
-              </div>
-              <CardDescription>
-                {analytic.id === "people-counting" && "Track the number of people entering and exiting areas"}
-                {analytic.id === "dwell-time" && "Analyze how long people spend in specific areas"}
-                {analytic.id === "line-crossing" && "Monitor traffic flow across defined lines"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {analytic.enabled && (
+      {/* Analytics Management Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Analytics Configurations</CardTitle>
+              <CardDescription>Manage analytics engine configurations</CardDescription>
+            </div>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Analytics
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Analytics Configuration</DialogTitle>
+                  <DialogDescription>
+                    Create a new analytics configuration
+                  </DialogDescription>
+                </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label className="text-sm font-medium">Select Cameras</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                      {cameras.map((camera) => (
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={newAnalytics.name}
+                      onChange={(e) => setNewAnalytics({ ...newAnalytics, name: e.target.value })}
+                      placeholder="e.g., People Counting"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="type">Analytics Type</Label>
+                    <Select
+                      value={newAnalytics.type}
+                      onValueChange={(value) => {
+                        const typeConfig = predefinedTypes.find(t => t.type === value)
+                        setNewAnalytics({ 
+                          ...newAnalytics, 
+                          type: value,
+                          name: typeConfig ? typeConfig.name : newAnalytics.name
+                        })
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select analytics type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {predefinedTypes.map((type) => (
+                          <SelectItem key={type.type} value={type.type}>
+                            <div className="flex items-center space-x-2">
+                              {getAnalyticsIcon(type.type)}
+                              <span>{type.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleAddAnalytics}>Add Analytics</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {analytics.map((analytic) => (
+              <Card key={analytic.id}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          checked={analytic.is_active}
+                          onCheckedChange={() => handleAnalyticsToggle(analytic)}
+                        />
+                        <div className="flex items-center space-x-2">
+                          {getAnalyticsIcon(analytic.type)}
+                          <Label className={getAnalyticsColor(analytic.type)}>{analytic.name}</Label>
+                        </div>
+                      </div>
+                      <span className="text-sm text-muted-foreground">({analytic.type})</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingAnalytics(analytic)
+                          setIsEditDialogOpen(true)
+                        }}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteAnalytics(analytic.id)}
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Analytics Description */}
+                  <div className="mt-2">
+                    <p className="text-sm text-muted-foreground">
+                      {predefinedTypes.find(t => t.type === analytic.type)?.description || "No description available"}
+                    </p>
+                  </div>
+                  
+                  {/* Camera Assignment */}
+                  <div className="mt-4">
+                    <Label className="text-sm font-medium">Assigned Cameras:</Label>
+                    <div className="mt-2 space-y-2">
+                      {(cameras || []).map((camera: any) => (
                         <div key={camera.id} className="flex items-center space-x-2">
                           <Checkbox
-                            id={`${analytic.id}-${camera.id}`}
-                            checked={analytic.cameras.includes(camera.id)}
+                            id={`camera-${camera.id}-${analytic.id}`}
+                            checked={isCameraAssigned(analytic.id, camera.id)}
                             onCheckedChange={() => handleCameraToggle(analytic.id, camera.id)}
                           />
-                          <Label 
-                            htmlFor={`${analytic.id}-${camera.id}`}
-                            className="text-sm cursor-pointer"
-                          >
+                          <Label htmlFor={`camera-${camera.id}-${analytic.id}`} className="text-sm">
                             {camera.name}
                           </Label>
                         </div>
                       ))}
                     </div>
                   </div>
-                  
-                  {analytic.id === "line-crossing" && analytic.cameras.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Line Configuration</Label>
-                      <div className="space-y-2">
-                        {analytic.cameras.map((cameraId) => {
-                          const camera = cameras.find(c => c.id === cameraId)
-                          const config = lineCrossingConfig.find(c => c.cameraId === cameraId)
-                          return (
-                            <div key={cameraId} className="flex items-center justify-between p-2 border rounded">
-                              <span className="text-sm">{camera?.name}</span>
-                              <Button
-                                size="sm"
-                                onClick={() => camera && handleLineCrossingSetup(camera)}
-                              >
-                                <Video className="h-4 w-4 mr-1" />
-                                {config?.lines.length ? `${config.lines.length} lines` : 'Draw Lines'}
-                              </Button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Line Drawing Dialog */}
-      <Dialog open={isLineDrawingOpen} onOpenChange={setIsLineDrawingOpen}>
-        <DialogContent className="max-w-4xl">
+      {/* Edit Analytics Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Draw Crossing Lines - {selectedCameraForLine?.name}</DialogTitle>
+            <DialogTitle>Edit Analytics Configuration</DialogTitle>
             <DialogDescription>
-              Click and drag to draw lines. People crossing these lines will be tracked.
+              Update analytics configuration settings
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="border rounded-lg overflow-hidden">
-              <canvas
-                width={640}
-                height={480}
-                className="w-full h-96 bg-black cursor-crosshair"
-                onClick={handleCanvasClick}
-                onMouseMove={handleCanvasMouseMove}
-                style={{ backgroundImage: `url(/placeholder.svg?height=480&width=640&text=Camera+${selectedCameraForLine?.id})` }}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                {isDrawing ? "Click to end line" : "Click to start drawing a line"}
+          {editingAnalytics && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-name">Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editingAnalytics.name}
+                  onChange={(e) => setEditingAnalytics({ ...editingAnalytics, name: e.target.value })}
+                />
               </div>
-              <div className="flex space-x-2">
-                {lines.map((line) => (
-                  <Button
-                    key={line.id}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDeleteLine(line.id)}
-                  >
-                    <X className="h-3 w-3 mr-1" />
-                    Line {line.id.slice(-4)}
-                  </Button>
-                ))}
+              <div>
+                <Label htmlFor="edit-type">Type</Label>
+                <Input
+                  id="edit-type"
+                  value={editingAnalytics.type}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  checked={editingAnalytics.is_active}
+                  onCheckedChange={(checked) => setEditingAnalytics({ ...editingAnalytics, is_active: checked })}
+                />
+                <Label>Active</Label>
               </div>
             </div>
-          </div>
-          
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsLineDrawingOpen(false)}>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveLines}>
-              Save Lines
-            </Button>
+            <Button onClick={handleUpdateAnalytics}>Update Analytics</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

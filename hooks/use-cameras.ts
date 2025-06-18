@@ -17,14 +17,14 @@ export interface Camera {
  * Hook for fetching all cameras
  */
 export function useCameras(immediate = true) {
-  return useApi<Camera[]>(() => apiClient.get<Camera[]>("/cameras"), immediate)
+  return useApi<Camera[]>(() => apiClient.get<Camera[]>("/api/v1/cameras"), immediate)
 }
 
 /**
  * Hook for fetching a single camera by ID
  */
 export function useCamera(id: number, immediate = true) {
-  return useApi<Camera>(() => apiClient.get<Camera>(`/cameras/${id}`), immediate)
+  return useApi<Camera>(() => apiClient.get<Camera>(`/api/v1/cameras/${id}`), immediate)
 }
 
 /**
@@ -38,7 +38,7 @@ export function useCameraOperations() {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await apiClient.post<Camera>("/cameras", cameraData)
+      const result = await apiClient.post<Camera>("/api/v1/cameras", cameraData)
       setIsLoading(false)
       return result
     } catch (err) {
@@ -53,7 +53,7 @@ export function useCameraOperations() {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await apiClient.put<Camera>(`/cameras/${id}`, cameraData)
+      const result = await apiClient.put<Camera>(`/api/v1/cameras/${id}`, cameraData)
       setIsLoading(false)
       return result
     } catch (err) {
@@ -68,7 +68,7 @@ export function useCameraOperations() {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await apiClient.delete<{ success: boolean }>(`/cameras/${id}`)
+      const result = await apiClient.delete<{ success: boolean }>(`/api/v1/cameras/${id}`)
       setIsLoading(false)
       return result
     } catch (err) {

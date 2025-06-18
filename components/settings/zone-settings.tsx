@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,92 +18,33 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
-import { apiClient } from "@/lib/api"
-
-interface Camera {
-  id: number
-  name: string
-  rtsp_url: string
-  location: string | null
-  is_active: boolean
-}
-
-interface Zone {
-  id: number
-  name: string
-  camera_id: number
-  analytics_id: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-interface AnalyticsConfig {
-  id: string
-  name: string
-  enabled: boolean
-}
+import { useZones, type Zone, type ZoneCreate } from "@/hooks/use-zones"
+import { useCameras } from "@/hooks/use-cameras"
+import { useAnalyticsManagement } from "@/hooks/use-analytics-management"
+import { getAllAnalyticsTypes } from "@/lib/constants/analytics"
 
 export default function ZoneSettings() {
-  const [zones, setZones] = useState<Zone[]>([])
-  const [cameras, setCameras] = useState<Camera[]>([])
-  const [analytics, setAnalytics] = useState<AnalyticsConfig[]>([])
-  const [loading, setLoading] = useState(true)
+  const { zones, loading, error, createZone, updateZone, deleteZone, toggleZoneActive } = useZones()
+  const { data: cameras = [] } = useCameras()
+  const { analytics } = useAnalyticsManagement()
+  const { toast } = useToast()
+  
+  const predefinedTypes = getAllAnalyticsTypes()
+  
   const [editZone, setEditZone] = useState<Zone | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [newZone, setNewZone] = useState<Partial<Zone>>({
+  const [newZone, setNewZone] = useState<Partial<ZoneCreate>>({
     name: "",
     camera_id: 0,
-    analytics_id: "",
+    analytics_id: 0,
     is_active: true,
   })
-  const { toast } = useToast()
-
-  // Fetch data on component mount
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
-    try {
-      // Fetch zones, cameras, and analytics configuration
-      const [zonesResponse, camerasResponse] = await Promise.all([
-        apiClient.get<Zone[]>('/api/v1/zones'),
-        apiClient.get<Camera[]>('/api/v1/cameras'),
-      ])
-      
-      setZones(zonesResponse || [])
-      setCameras(camerasResponse || [])
-      
-      // For now, we'll use a static analytics config since it's managed in the analytics tab
-      setAnalytics([
-        {
-          id: "people-counting",
-          name: "People Counting",
-          enabled: true,
-        },
-        {
-          id: "dwell-time",
-          name: "Dwell Time Analysis",
-          enabled: true,
-        },
-      ])
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch data",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleAddZone = async () => {
     if (newZone.name && newZone.camera_id && newZone.analytics_id) {
-      try {
-        await apiClient.post('/api/v1/zones', newZone)
+      const result = await createZone(newZone as ZoneCreate)
+      if (result) {
         toast({
           title: "Success",
           description: "Zone added successfully",
@@ -111,12 +52,11 @@ export default function ZoneSettings() {
         setNewZone({
           name: "",
           camera_id: 0,
-          analytics_id: "",
+          analytics_id: 0,
           is_active: true,
         })
         setIsAddDialogOpen(false)
-        fetchData()
-      } catch (error) {
+      } else {
         toast({
           title: "Error",
           description: "Failed to add zone",
@@ -128,16 +68,20 @@ export default function ZoneSettings() {
 
   const handleUpdateZone = async () => {
     if (editZone) {
-      try {
-        await apiClient.put(`/api/v1/zones/${editZone.id}`, editZone)
+      const result = await updateZone(editZone.id, {
+        name: editZone.name,
+        camera_id: editZone.camera_id,
+        analytics_id: editZone.analytics_id,
+        is_active: editZone.is_active
+      })
+      if (result) {
         toast({
           title: "Success",
           description: "Zone updated successfully",
         })
         setEditZone(null)
         setIsEditDialogOpen(false)
-        fetchData()
-      } catch (error) {
+      } else {
         toast({
           title: "Error",
           description: "Failed to update zone",
@@ -148,14 +92,13 @@ export default function ZoneSettings() {
   }
 
   const handleDeleteZone = async (id: number) => {
-    try {
-      await apiClient.delete(`/api/v1/zones/${id}`)
+    const result = await deleteZone(id)
+    if (result) {
       toast({
         title: "Success",
         description: "Zone deleted successfully",
       })
-      fetchData()
-    } catch (error) {
+    } else {
       toast({
         title: "Error",
         description: "Failed to delete zone",
@@ -164,11 +107,14 @@ export default function ZoneSettings() {
     }
   }
 
-  const handleToggleActive = async (id: number, currentValue: boolean) => {
-    try {
-      await apiClient.put(`/api/v1/zones/${id}`, { is_active: !currentValue })
-      fetchData()
-    } catch (error) {
+  const handleToggleActive = async (id: number) => {
+    const result = await toggleZoneActive(id)
+    if (result) {
+      toast({
+        title: "Success",
+        description: "Zone status updated successfully",
+      })
+    } else {
       toast({
         title: "Error",
         description: "Failed to update zone status",
@@ -183,15 +129,36 @@ export default function ZoneSettings() {
   }
 
   const getCameraName = (cameraId: number) => {
-    return cameras.find(camera => camera.id === cameraId)?.name || `Camera ${cameraId}`
+    return (cameras || []).find((camera: any) => camera.id === cameraId)?.name || `Camera ${cameraId}`
   }
 
-  const getAnalyticsName = (analyticsId: string) => {
-    return analytics.find(analytic => analytic.id === analyticsId)?.name || analyticsId
+  const getAnalyticsName = (analyticsId: number) => {
+    const analytic = (analytics || []).find((a: any) => a.id === analyticsId)
+    if (analytic) {
+      return analytic.name
+    }
+    return `Analytics ${analyticsId}`
+  }
+
+  const getAnalyticsDescription = (analyticsId: number) => {
+    const analytic = (analytics || []).find((a: any) => a.id === analyticsId)
+    if (analytic) {
+      const typeConfig = predefinedTypes.find(t => t.type === analytic.type)
+      return typeConfig?.description || "No description available"
+    }
+    return ""
   }
 
   if (loading) {
     return <div className="flex justify-center p-4">Loading zones...</div>
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center p-4 text-red-500">
+        Error: {error}
+      </div>
+    )
   }
 
   return (
@@ -201,40 +168,38 @@ export default function ZoneSettings() {
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4 mr-2" />
               Add Zone
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New Zone</DialogTitle>
-              <DialogDescription>Enter the details for the new zone.</DialogDescription>
+              <DialogDescription>
+                Create a new zone for analytics monitoring
+              </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">
-                  Name
-                </Label>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="name">Zone Name</Label>
                 <Input
                   id="name"
                   value={newZone.name}
                   onChange={(e) => setNewZone({ ...newZone, name: e.target.value })}
-                  className="col-span-3"
+                  placeholder="e.g., Entrance Zone"
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="camera" className="text-right">
-                  Camera
-                </Label>
-                <Select 
-                  value={newZone.camera_id?.toString() || ""} 
+              <div>
+                <Label htmlFor="camera">Camera</Label>
+                <Select
+                  value={newZone.camera_id?.toString() || ""}
                   onValueChange={(value) => setNewZone({ ...newZone, camera_id: parseInt(value) })}
                 >
-                  <SelectTrigger className="col-span-3">
+                  <SelectTrigger>
                     <SelectValue placeholder="Select a camera" />
                   </SelectTrigger>
                   <SelectContent>
-                    {cameras.filter(camera => camera.is_active).map((camera) => (
+                    {(cameras || []).map((camera: any) => (
                       <SelectItem key={camera.id} value={camera.id.toString()}>
                         {camera.name}
                       </SelectItem>
@@ -242,46 +207,43 @@ export default function ZoneSettings() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="analytics" className="text-right">
-                  Analytics
-                </Label>
-                <Select 
-                  value={newZone.analytics_id || ""} 
-                  onValueChange={(value) => setNewZone({ ...newZone, analytics_id: value })}
+              <div>
+                <Label htmlFor="analytics">Analytics</Label>
+                <Select
+                  value={newZone.analytics_id?.toString() || ""}
+                  onValueChange={(value) => setNewZone({ ...newZone, analytics_id: parseInt(value) })}
                 >
-                  <SelectTrigger className="col-span-3">
+                  <SelectTrigger>
                     <SelectValue placeholder="Select analytics" />
                   </SelectTrigger>
                   <SelectContent>
-                    {analytics.filter(analytic => analytic.enabled && analytic.id !== "line-crossing").map((analytic) => (
-                      <SelectItem key={analytic.id} value={analytic.id}>
+                    {(analytics || []).map((analytic: any) => (
+                      <SelectItem key={analytic.id} value={analytic.id.toString()}>
                         {analytic.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="is_active" className="text-right">
-                  Active
-                </Label>
+              <div className="flex items-center space-x-2">
                 <Switch
-                  id="is_active"
                   checked={newZone.is_active}
                   onCheckedChange={(checked) => setNewZone({ ...newZone, is_active: checked })}
-                  className="col-span-3"
                 />
+                <Label>Active</Label>
               </div>
             </div>
             <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                Cancel
+              </Button>
               <Button onClick={handleAddZone}>Add Zone</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="rounded-md border">
+      <div className="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
@@ -289,125 +251,122 @@ export default function ZoneSettings() {
               <TableHead>Camera</TableHead>
               <TableHead>Analytics</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {zones?.map((zone) => (
+            {(zones || []).map((zone) => (
               <TableRow key={zone.id}>
                 <TableCell className="font-medium">{zone.name}</TableCell>
+                <TableCell>{getCameraName(zone.camera_id)}</TableCell>
+                <TableCell>{getAnalyticsName(zone.analytics_id)}</TableCell>
                 <TableCell>
-                  <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                    {getCameraName(zone.camera_id)}
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={zone.is_active}
+                      onCheckedChange={() => handleToggleActive(zone.id)}
+                    />
+                    <span className={zone.is_active ? "text-green-600" : "text-red-600"}>
+                      {zone.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell>
-                  <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
-                    {getAnalyticsName(zone.analytics_id)}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Switch
-                    checked={zone.is_active}
-                    onCheckedChange={() => handleToggleActive(zone.id, zone.is_active)}
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => handleEditClick(zone)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Edit Zone</DialogTitle>
-                        <DialogDescription>Update the zone details.</DialogDescription>
-                      </DialogHeader>
-                      {editZone && (
-                        <div className="grid gap-4 py-4">
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-name" className="text-right">
-                              Name
-                            </Label>
-                            <Input
-                              id="edit-name"
-                              value={editZone.name}
-                              onChange={(e) => setEditZone({ ...editZone, name: e.target.value })}
-                              className="col-span-3"
-                            />
-                          </div>
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-camera" className="text-right">
-                              Camera
-                            </Label>
-                            <Select 
-                              value={editZone.camera_id?.toString() || ""} 
-                              onValueChange={(value) => setEditZone({ ...editZone, camera_id: parseInt(value) })}
-                            >
-                              <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Select a camera" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {cameras.filter(camera => camera.is_active).map((camera) => (
-                                  <SelectItem key={camera.id} value={camera.id.toString()}>
-                                    {camera.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-analytics" className="text-right">
-                              Analytics
-                            </Label>
-                            <Select 
-                              value={editZone.analytics_id || ""} 
-                              onValueChange={(value) => setEditZone({ ...editZone, analytics_id: value })}
-                            >
-                              <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Select analytics" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {analytics.filter(analytic => analytic.enabled && analytic.id !== "line-crossing").map((analytic) => (
-                                  <SelectItem key={analytic.id} value={analytic.id}>
-                                    {analytic.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-active" className="text-right">
-                              Active
-                            </Label>
-                            <Switch
-                              id="edit-active"
-                              checked={editZone.is_active}
-                              onCheckedChange={(checked) => setEditZone({ ...editZone, is_active: checked })}
-                              className="col-span-3"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <DialogFooter>
-                        <Button onClick={handleUpdateZone}>Save Changes</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteZone(zone.id)}
-                  >
-                    <Trash className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditClick(zone)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteZone(zone.id)}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {/* Edit Zone Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Zone</DialogTitle>
+            <DialogDescription>
+              Update zone configuration
+            </DialogDescription>
+          </DialogHeader>
+          {editZone && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-name">Zone Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editZone.name}
+                  onChange={(e) => setEditZone({ ...editZone, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-camera">Camera</Label>
+                <Select
+                  value={editZone.camera_id.toString()}
+                  onValueChange={(value) => setEditZone({ ...editZone, camera_id: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(cameras || []).map((camera: any) => (
+                      <SelectItem key={camera.id} value={camera.id.toString()}>
+                        {camera.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-analytics">Analytics</Label>
+                <Select
+                  value={editZone.analytics_id.toString()}
+                  onValueChange={(value) => setEditZone({ ...editZone, analytics_id: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(analytics || []).map((analytic: any) => (
+                      <SelectItem key={analytic.id} value={analytic.id.toString()}>
+                        {analytic.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  checked={editZone.is_active}
+                  onCheckedChange={(checked) => setEditZone({ ...editZone, is_active: checked })}
+                />
+                <Label>Active</Label>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateZone}>Update Zone</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 

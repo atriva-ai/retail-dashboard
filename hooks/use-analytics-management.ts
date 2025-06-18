@@ -1,29 +1,6 @@
-"use client"
-
 import { useState, useEffect } from 'react'
-import { apiClient } from "@/lib/api"
-import { useApi } from "./use-api"
-
-export interface AnalyticsEngine {
-  id: string
-  name: string
-  enabled: boolean
-  sensitivity: number
-  processingMode: "real-time" | "batch" | "hybrid"
-}
-
-export interface TrafficData {
-  time: string
-  entrance: number
-  productArea: number
-  checkout: number
-}
-
-export interface DwellTimeData {
-  zone: string
-  avgTime: number
-  peakTime: number
-}
+import { apiClient } from '@/lib/api'
+import { getAllAnalyticsTypes, type AnalyticsTypeConfig } from '@/lib/constants/analytics'
 
 export interface Analytics {
   id: number
@@ -54,51 +31,9 @@ export interface CameraAnalytics {
   analytics_id: number
 }
 
-/**
- * Hook for fetching analytics engines
- */
-export function useAnalyticsEngines(immediate = true) {
-  return useApi<AnalyticsEngine[]>(() => apiClient.get<AnalyticsEngine[]>("/analytics/engines"), immediate)
-}
-
-/**
- * Hook for updating analytics engine settings
- */
-export function useUpdateAnalyticsEngine() {
-  return useApi<AnalyticsEngine, { id: string; data: Partial<AnalyticsEngine> }>(({ id, data }) =>
-    apiClient.put<AnalyticsEngine>(`/analytics/engines/${id}`, data),
-  )
-}
-
-/**
- * Hook for fetching traffic data
- */
-export function useTrafficData(timeframe: "today" | "week" | "month" = "today", immediate = true) {
-  return useApi<TrafficData[]>(() => apiClient.get<TrafficData[]>("/analytics/traffic", { timeframe }), immediate)
-}
-
-/**
- * Hook for fetching dwell time data
- */
-export function useDwellTimeData(timeframe: "today" | "week" | "month" = "today", immediate = true) {
-  return useApi<DwellTimeData[]>(
-    () => apiClient.get<DwellTimeData[]>("/analytics/dwell-time", { timeframe }),
-    immediate,
-  )
-}
-
-/**
- * Hook for fetching heatmap data
- */
-export function useHeatmapData(zone = "all", timeframe: "today" | "week" | "month" = "today") {
-  return useApi<{ x: number; y: number; value: number }[]>(
-    () => apiClient.get("/analytics/heatmap", { zone, timeframe }),
-    true,
-  )
-}
-
-export function useAnalytics() {
+export function useAnalyticsManagement() {
   const [analytics, setAnalytics] = useState<Analytics[]>([])
+  const [analyticsTypes, setAnalyticsTypes] = useState<Record<string, AnalyticsTypeConfig>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -113,6 +48,21 @@ export function useAnalytics() {
       console.error('Error fetching analytics:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAnalyticsTypes = async () => {
+    try {
+      const response = await apiClient.get<Record<string, AnalyticsTypeConfig>>('/api/analytics/types')
+      setAnalyticsTypes(response || {})
+    } catch (err) {
+      console.error('Error fetching analytics types:', err)
+      // Fallback to local constants if API fails
+      const localTypes = getAllAnalyticsTypes().reduce((acc, type) => {
+        acc[type.type] = type
+        return acc
+      }, {} as Record<string, AnalyticsTypeConfig>)
+      setAnalyticsTypes(localTypes)
     }
   }
 
@@ -190,13 +140,16 @@ export function useAnalytics() {
 
   useEffect(() => {
     fetchAnalytics()
+    fetchAnalyticsTypes()
   }, [])
 
   return {
     analytics,
+    analyticsTypes,
     loading,
     error,
     fetchAnalytics,
+    fetchAnalyticsTypes,
     createAnalytics,
     updateAnalytics,
     deleteAnalytics,
@@ -204,4 +157,4 @@ export function useAnalytics() {
     addAnalyticsToCamera,
     removeAnalyticsFromCamera,
   }
-}
+} 
