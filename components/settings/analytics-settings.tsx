@@ -21,12 +21,14 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { useAnalyticsManagement, type Analytics } from "@/hooks/use-analytics-management"
-import { useCameras } from "@/hooks/use-cameras"
+import { apiClient } from "@/lib/api"
+import { Camera } from "@/types"
 import { getAllAnalyticsTypes, type AnalyticsTypeConfig } from "@/lib/constants/analytics"
 
 export default function AnalyticsSettings() {
   const { analytics, analyticsTypes, loading, error, createAnalytics, updateAnalytics, deleteAnalytics, addAnalyticsToCamera, removeAnalyticsFromCamera, getCameraAnalytics } = useAnalyticsManagement()
-  const { data: cameras = [] } = useCameras()
+  const [cameras, setCameras] = useState<Camera[]>([])
+  const [camerasLoading, setCamerasLoading] = useState(true)
   const { toast } = useToast()
   
   // Dialog states for analytics management
@@ -44,6 +46,23 @@ export default function AnalyticsSettings() {
   const [cameraAssignments, setCameraAssignments] = useState<Record<number, number[]>>({})
 
   const predefinedTypes = getAllAnalyticsTypes()
+
+  // Fetch cameras on component mount
+  useEffect(() => {
+    const fetchCameras = async () => {
+      try {
+        const response = await apiClient.get<Camera[]>('/api/v1/cameras/')
+        setCameras(response || [])
+      } catch (error) {
+        console.error("Error fetching cameras:", error)
+        setCameras([])
+      } finally {
+        setCamerasLoading(false)
+      }
+    }
+    
+    fetchCameras()
+  }, [])
 
   // Fetch camera assignments for all analytics
   const fetchCameraAssignments = async () => {
