@@ -34,8 +34,10 @@ export function useApi<T, P = void>(
   const isMounted = useRef(true)
 
   useEffect(() => {
+    console.log('[useApi] mounted, immediate:', immediate, 'initialParams:', initialParams)
     return () => {
       isMounted.current = false
+      console.log('[useApi] unmounted')
     }
   }, [])
 
@@ -43,6 +45,7 @@ export function useApi<T, P = void>(
     async (params?: P): Promise<T | null> => {
       if (!isMounted.current) return null
       setState((prev) => ({ ...prev, isLoading: true, error: null }))
+      console.log('[useApi] execute called, params:', params)
       try {
         const data = await apiMethod(params as P)
         console.log('✅ API call successful:', data);
@@ -77,7 +80,8 @@ export function useApi<T, P = void>(
   }, [immediate, initialParams, execute])
   */
   useEffect(() => {
-    if (immediate && initialParams !== undefined) {
+    if (immediate) {
+      console.log('[useApi] immediate effect running, calling execute with:', initialParams)
       execute(initialParams)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

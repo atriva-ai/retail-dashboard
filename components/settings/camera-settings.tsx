@@ -46,7 +46,7 @@ export default function CameraSettings() {
 
   const fetchCameras = async () => {
     try {
-      const response = await apiClient.get<Camera[]>('/api/v1/cameras')
+      const response = await apiClient.get<Camera[]>('/api/v1/cameras/')
       setCameras(response || [])
     } catch (error) {
       toast({

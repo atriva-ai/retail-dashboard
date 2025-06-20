@@ -3,21 +3,23 @@
 import { useState, useCallback } from "react"
 import { apiClient } from "@/lib/api"
 import { useApi } from "./use-api"
-
-export interface Camera {
-  id: number
-  name: string
-  zone: string
-  ipAddress: string
-  status: "online" | "offline" | "warning"
-  analyticsEnabled: boolean
-}
+import { Camera } from "@/types"
 
 /**
  * Hook for fetching all cameras
  */
 export function useCameras(immediate = true) {
-  return useApi<Camera[]>(() => apiClient.get<Camera[]>("/api/v1/cameras"), immediate)
+  console.log("[useCameras] hook called, immediate:", immediate)
+  return useApi<Camera[]>(() => {
+    console.log("[useCameras] Fetching /api/v1/cameras from backend...")
+    return apiClient.get<Camera[]>("/api/v1/cameras").then((result) => {
+      console.log("[useCameras] Received camera list:", result)
+      return result
+    }).catch((err) => {
+      console.error("[useCameras] Error fetching camera list:", err)
+      throw err
+    })
+  }, immediate)
 }
 
 /**

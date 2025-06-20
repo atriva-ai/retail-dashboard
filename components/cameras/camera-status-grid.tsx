@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { useCameras, type Camera } from "@/hooks/use-cameras"
+import { apiClient } from "@/lib/api"
+import { Camera, CameraDisplay } from "@/types"
 
 // Fallback data in case API fails
 const fallbackCameras = [
@@ -26,20 +27,49 @@ const fallbackCameras = [
 ]
 
 export default function CameraStatusGrid() {
-  const { data, isLoading, error } = useCameras()
-  const [cameraData, setCameraData] = useState<Camera[]>([])
+  const [cameraData, setCameraData] = useState<CameraDisplay[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
-    if (data) {
-      setCameraData(data)
-    } else {
-      // Use fallback data if API fails
-      setCameraData(fallbackCameras as Camera[])
+    const fetchCameras = async () => {
+      try {
+        console.log("CameraStatusGrid: Fetching cameras from API...")
+        const response = await apiClient.get<Camera[]>('/api/v1/cameras/')
+        console.log("CameraStatusGrid: Received cameras:", response)
+        
+        // Transform backend data to frontend format
+        const transformedCameras: CameraDisplay[] = (response || []).map(camera => ({
+          id: camera.id,
+          name: camera.name,
+          zone: camera.location || "Unknown Zone",
+          ipAddress: camera.rtsp_url,
+          status: camera.is_active ? "online" : "offline",
+          analyticsEnabled: camera.zone_ids.length > 0
+        }))
+        
+        setCameraData(transformedCameras)
+        setError(null)
+      } catch (err) {
+        console.error("CameraStatusGrid: Error fetching cameras:", err)
+        setError(err instanceof Error ? err : new Error("Failed to fetch cameras"))
+        setCameraData([])
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [data])
+
+    fetchCameras()
+  }, [])
 
   if (isLoading) {
     return <div className="text-center p-4">Loading camera status...</div>
+  }
+  if (error) {
+    return <div className="text-center p-4 text-red-500">Failed to load camera status</div>
+  }
+  if (!cameraData || cameraData.length === 0) {
+    return <div className="text-center p-4">No cameras found.</div>
   }
 
   return (

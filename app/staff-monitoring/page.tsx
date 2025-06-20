@@ -1,9 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import StaffServiceTime from "@/components/staff-service-time"
-import QueueLength from "@/components/queue-length"
-import InventoryActivity from "@/components/inventory-activity"
+import { StaffServiceTime } from "@/components/staff-monitoring"
+import { QueueLength } from "@/components/dashboard"
+import { InventoryActivity } from "@/components/product-analytics"
 
 export default function StaffMonitoringPage() {
   return (

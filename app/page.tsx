@@ -3,8 +3,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, ArrowDown, ArrowUp, Clock, Package, ShoppingCart, Users } from "lucide-react"
 import { ChartWrapper } from "@/components/ui/chart"
-import DashboardChart from "@/components/dashboard-chart"
-import CameraStatusGrid from "@/components/camera-status-grid"
+import { DashboardChart } from "@/components/dashboard"
+import { CameraStatusGrid, CameraStatusHeader } from "@/components/cameras"
 
 export default function Dashboard() {
   return (
@@ -91,14 +91,16 @@ export default function Dashboard() {
             <CardTitle>Hourly Traffic</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
-            <ChartWrapper content={DashboardChart} className="h-[300px]" title="Hourly Traffic" />
+            <ChartWrapper className="h-[300px]" title="Hourly Traffic">
+              <DashboardChart />
+            </ChartWrapper>
           </CardContent>
         </Card>
 
         <Card className="col-span-3">
           <CardHeader>
             <CardTitle>Camera Status</CardTitle>
-            <CardDescription>16 total cameras across all zones</CardDescription>
+            <CardDescription><CameraStatusHeader /></CardDescription>
           </CardHeader>
           <CardContent>
             <CameraStatusGrid />

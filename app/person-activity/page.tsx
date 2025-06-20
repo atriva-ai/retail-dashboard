@@ -1,9 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import PersonJourneyMap from "@/components/person-journey-map"
-import PersonDemographics from "@/components/person-demographics"
-import EntryExitTracking from "@/components/entry-exit-tracking"
+import { PersonDemographics, PersonJourneyMap, EntryExitTracking } from "@/components/person-activity"
 
 export default function PersonActivityPage() {
   return (

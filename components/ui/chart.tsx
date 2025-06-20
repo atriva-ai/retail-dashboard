@@ -6,16 +6,16 @@ import type { TooltipProps } from "recharts"
 
 interface ChartWrapperProps {
   children: React.ReactNode
-  content: React.ComponentType<any>
+  content?: React.ComponentType<any>
   className?: string
   title?: string
 }
 
-export function ChartWrapper({ content: Content, className, title }: ChartWrapperProps) {
+export function ChartWrapper({ content: Content, className, title, children }: ChartWrapperProps) {
   return (
     <div className={className}>
       {title && <h3>{title}</h3>}
-      <Content />
+      {Content ? <Content /> : children}
     </div>
   )
 }

@@ -1,9 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import ProductHeatmap from "@/components/product-heatmap"
-import ProductDwellTime from "@/components/product-dwell-time"
-import ProductComparison from "@/components/product-comparison"
+import { ProductHeatmap, ProductDwellTime, ProductComparison } from "@/components/product-analytics"
 
 export default function ProductAnalyticsPage() {
   return (

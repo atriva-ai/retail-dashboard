@@ -2,12 +2,24 @@
  * Base API configuration and utility functions
  */
 
-// API base URL - replace with your actual API endpoint
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+// API base URL - handle both server-side (Docker) and client-side (browser) environments
+const getApiBaseUrl = () => {
+  // If we're on the server-side (in Docker), use the internal service name
+  if (typeof window === 'undefined') {
+    return process.env.INTERNAL_API_URL || "http://backend:8000"
+  }
+  // If we're on the client-side (browser), use the public URL
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 // Debug log the API base URL
 console.log('🔧 API Base URL:', API_BASE_URL)
 console.log('🔧 Environment:', process.env.NODE_ENV)
+console.log('🔧 Internal API URL:', process.env.INTERNAL_API_URL)
+console.log('🔧 Public API URL:', process.env.NEXT_PUBLIC_API_URL)
+console.log('🔧 Is Server Side:', typeof window === 'undefined')
 
 // Default request headers
 const defaultHeaders = {
@@ -25,6 +37,9 @@ export async function fetchWithTimeout(
   options: RequestInit = {},
   timeout: number = TIMEOUT,
 ): Promise<Response> {
+  console.log('🌐 Making API request to:', url)
+  console.log('🌐 Request options:', { method: options.method, headers: options.headers })
+  
   const controller = new AbortController()
   const { signal } = controller
 
@@ -37,16 +52,29 @@ export async function fetchWithTimeout(
     })
 
     clearTimeout(timeoutId)
+    console.log('🌐 Response status:', response.status, response.statusText)
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      console.error('API Error:', errorData)
-      throw new Error(errorData.message || `API error: ${response.status}`)
+      console.error('API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        data: errorData
+      })
+      
+      // Create a more descriptive error message
+      const errorMessage = errorData.message || 
+                          errorData.error || 
+                          `HTTP ${response.status}: ${response.statusText}`
+      
+      throw new Error(errorMessage)
     }
 
     return response
   } catch (error) {
     clearTimeout(timeoutId)
+    console.error('🌐 Fetch error:', error)
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("Request timeout")
     }
