@@ -45,7 +45,8 @@ export default function CameraStatusGrid() {
           zone: camera.location || "Unknown Zone",
           ipAddress: camera.rtsp_url,
           status: camera.is_active ? "online" : "offline",
-          analyticsEnabled: camera.zone_ids.length > 0
+          analyticsEnabled: camera.zone_ids.length > 0,
+          video_info: camera.video_info
         }))
         
         setCameraData(transformedCameras)

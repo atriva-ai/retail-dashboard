@@ -10,15 +10,12 @@ COPY package.json package-lock.json ./
 # 4. Install dependencies
 RUN npm install --legacy-peer-deps
 
-# 5. Copy source code
+# 5. Copy source code and environment files
 COPY . .
 
-# Build arguments
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
 # Debug environment variables
-RUN echo "API URL is $NEXT_PUBLIC_API_URL"
+RUN echo "Contents of .env.local:"
+RUN cat .env.local || echo "No .env.local file found"
 
 # 6. Build the app
 RUN npm run build
@@ -30,7 +27,6 @@ WORKDIR /app
 
 # Set env to production
 ENV NODE_ENV=production
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # Copy built output from builder
 COPY --from=builder /app/public ./public

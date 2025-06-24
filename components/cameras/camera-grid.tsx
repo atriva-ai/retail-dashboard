@@ -26,7 +26,8 @@ export default function CameraGrid() {
           zone: camera.location || "Unknown Zone",
           ipAddress: camera.rtsp_url,
           status: camera.is_active ? "online" : "offline",
-          analyticsEnabled: camera.zone_ids.length > 0
+          analyticsEnabled: camera.zone_ids.length > 0,
+          video_info: camera.video_info
         }))
         
         setCameras(transformedCameras)
@@ -91,6 +92,16 @@ export default function CameraGrid() {
                   {camera.analyticsEnabled ? "Enabled" : "Disabled"}
                 </Badge>
               </div>
+              {camera.video_info && (
+                <div className="border-t pt-2 mt-2">
+                  <div className="text-xs text-muted-foreground mb-1">Video Info:</div>
+                  <div className="space-y-1 text-xs">
+                    <div>Codec: {camera.video_info.info?.codec || "Unknown"}</div>
+                    <div>Resolution: {camera.video_info.info?.width || "?"}x{camera.video_info.info?.height || "?"}</div>
+                    <div>FPS: {camera.video_info.info?.fps || "?"}</div>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

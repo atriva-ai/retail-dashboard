@@ -26,8 +26,36 @@ interface Camera {
   rtsp_url: string
   location: string | null
   is_active: boolean
+  video_info: any
   created_at: string
   updated_at: string
+}
+
+interface VideoValidation {
+  status: string
+  video_info: any
+  errors: string[]
+}
+
+interface CreateCameraResponse {
+  camera: Camera
+  video_validation: VideoValidation
+}
+
+interface ActivateCameraResponse {
+  camera_id: number
+  rtsp_url: string
+  activation: {
+    status: string
+    decode_status: any
+    errors: string[]
+  }
+}
+
+interface ValidateVideoResponse {
+  camera_id: number
+  rtsp_url: string
+  validation: VideoValidation
 }
 
 export default function CameraSettings() {
@@ -38,7 +66,6 @@ export default function CameraSettings() {
     name: "",
     rtsp_url: "",
     location: "",
-    is_active: true,
   })
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -67,16 +94,37 @@ export default function CameraSettings() {
   const handleAddCamera = async () => {
     if (newCamera.name && newCamera.rtsp_url) {
       try {
-        await apiClient.post('/api/v1/cameras', newCamera)
-        toast({
-          title: "Success",
-          description: "Camera added successfully",
-        })
+        const response = await apiClient.post<CreateCameraResponse>('/api/v1/cameras/', newCamera)
+        
+        // Handle the new response format with video validation
+        if (response && response.camera) {
+          toast({
+            title: "Success",
+            description: "Camera added successfully",
+          })
+          
+          // Show video validation status if available
+          if (response.video_validation) {
+            const validation = response.video_validation
+            if (validation.status === "validated") {
+              toast({
+                title: "Video Stream Validated",
+                description: `Video stream is accessible. Camera is ready to be activated.`,
+              })
+            } else if (validation.errors && validation.errors.length > 0) {
+              toast({
+                title: "Video Stream Issues",
+                description: `Camera added but video stream has issues: ${validation.errors.join(", ")}`,
+                variant: "destructive",
+              })
+            }
+          }
+        }
+        
         setNewCamera({
           name: "",
           rtsp_url: "",
           location: "",
-          is_active: true,
         })
         setIsAddDialogOpen(false)
         fetchCameras()
@@ -146,6 +194,64 @@ export default function CameraSettings() {
     setIsEditDialogOpen(true)
   }
 
+  const handleValidateVideo = async (cameraId: number) => {
+    try {
+      const response = await apiClient.post<ValidateVideoResponse>(`/api/v1/cameras/${cameraId}/validate-video/`)
+      
+      if (response && response.validation) {
+        const validation = response.validation
+        if (validation.status === "validated" || validation.status === "decoding_started") {
+          toast({
+            title: "Video Stream Validated",
+            description: `Video stream is accessible and processing started`,
+          })
+        } else if (validation.errors && validation.errors.length > 0) {
+          toast({
+            title: "Video Stream Issues",
+            description: `Video stream has issues: ${validation.errors.join(", ")}`,
+            variant: "destructive",
+          })
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to validate video stream",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleActivateCamera = async (cameraId: number) => {
+    try {
+      const response = await apiClient.post<ActivateCameraResponse>(`/api/v1/cameras/${cameraId}/activate/`)
+      
+      if (response && response.activation) {
+        const activation = response.activation
+        if (activation.status === "activated") {
+          toast({
+            title: "Camera Activated",
+            description: "Camera is now active and processing video",
+          })
+        } else if (activation.errors && activation.errors.length > 0) {
+          toast({
+            title: "Activation Failed",
+            description: `Failed to activate camera: ${activation.errors.join(", ")}`,
+            variant: "destructive",
+          })
+        }
+      }
+      
+      fetchCameras()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to activate camera",
+        variant: "destructive",
+      })
+    }
+  }
+
   if (loading) {
     return <div className="flex justify-center p-4">Loading cameras...</div>
   }
@@ -200,17 +306,6 @@ export default function CameraSettings() {
                   className="col-span-3"
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="is_active" className="text-right">
-                  Active
-                </Label>
-                <Switch
-                  id="is_active"
-                  checked={newCamera.is_active}
-                  onCheckedChange={(checked) => setNewCamera({ ...newCamera, is_active: checked })}
-                  className="col-span-3"
-                />
-              </div>
             </div>
             <DialogFooter>
               <Button onClick={handleAddCamera}>Add Camera</Button>
@@ -227,6 +322,7 @@ export default function CameraSettings() {
               <TableHead>Location</TableHead>
               <TableHead>RTSP URL</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Video Info</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -237,83 +333,119 @@ export default function CameraSettings() {
                 <TableCell>{camera.location || "Not specified"}</TableCell>
                 <TableCell className="max-w-[200px] truncate">{camera.rtsp_url}</TableCell>
                 <TableCell>
-                  <Switch
-                    checked={camera.is_active}
-                    onCheckedChange={() => handleToggleActive(camera.id, camera.is_active)}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={camera.is_active}
+                      onCheckedChange={() => handleToggleActive(camera.id, camera.is_active)}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {camera.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {camera.video_info ? (
+                    <div className="text-sm space-y-1">
+                      <div>Codec: {camera.video_info.info?.codec || "Unknown"}</div>
+                      <div>Resolution: {camera.video_info.info?.width || "?"}x{camera.video_info.info?.height || "?"}</div>
+                      <div>FPS: {camera.video_info.info?.fps || "?"}</div>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">No video info</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => handleEditClick(camera)}>
-                        <Edit className="h-4 w-4" />
+                  <div className="flex justify-end gap-2">
+                    {!camera.is_active && camera.video_info && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleActivateCamera(camera.id)}
+                        title="Activate Camera"
+                      >
+                        Activate
                       </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Edit Camera</DialogTitle>
-                        <DialogDescription>Update the camera details.</DialogDescription>
-                      </DialogHeader>
-                      {editCamera && (
-                        <div className="grid gap-4 py-4">
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-name" className="text-right">
-                              Name
-                            </Label>
-                            <Input
-                              id="edit-name"
-                              value={editCamera.name}
-                              onChange={(e) => setEditCamera({ ...editCamera, name: e.target.value })}
-                              className="col-span-3"
-                            />
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleValidateVideo(camera.id)}
+                      title="Validate Video Stream"
+                    >
+                      <Camera className="h-4 w-4" />
+                    </Button>
+                    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(camera)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Edit Camera</DialogTitle>
+                          <DialogDescription>Update the camera details.</DialogDescription>
+                        </DialogHeader>
+                        {editCamera && (
+                          <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="edit-name" className="text-right">
+                                Name
+                              </Label>
+                              <Input
+                                id="edit-name"
+                                value={editCamera.name}
+                                onChange={(e) => setEditCamera({ ...editCamera, name: e.target.value })}
+                                className="col-span-3"
+                              />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="edit-rtsp" className="text-right">
+                                RTSP URL
+                              </Label>
+                              <Input
+                                id="edit-rtsp"
+                                value={editCamera.rtsp_url}
+                                onChange={(e) => setEditCamera({ ...editCamera, rtsp_url: e.target.value })}
+                                className="col-span-3"
+                              />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="edit-location" className="text-right">
+                                Location
+                              </Label>
+                              <Input
+                                id="edit-location"
+                                value={editCamera.location || ""}
+                                onChange={(e) => setEditCamera({ ...editCamera, location: e.target.value })}
+                                className="col-span-3"
+                              />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="edit-active" className="text-right">
+                                Active
+                              </Label>
+                              <Switch
+                                id="edit-active"
+                                checked={editCamera.is_active}
+                                onCheckedChange={(checked) => setEditCamera({ ...editCamera, is_active: checked })}
+                                className="col-span-3"
+                              />
+                            </div>
                           </div>
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-rtsp" className="text-right">
-                              RTSP URL
-                            </Label>
-                            <Input
-                              id="edit-rtsp"
-                              value={editCamera.rtsp_url}
-                              onChange={(e) => setEditCamera({ ...editCamera, rtsp_url: e.target.value })}
-                              className="col-span-3"
-                            />
-                          </div>
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-location" className="text-right">
-                              Location
-                            </Label>
-                            <Input
-                              id="edit-location"
-                              value={editCamera.location || ""}
-                              onChange={(e) => setEditCamera({ ...editCamera, location: e.target.value })}
-                              className="col-span-3"
-                            />
-                          </div>
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="edit-active" className="text-right">
-                              Active
-                            </Label>
-                            <Switch
-                              id="edit-active"
-                              checked={editCamera.is_active}
-                              onCheckedChange={(checked) => setEditCamera({ ...editCamera, is_active: checked })}
-                              className="col-span-3"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <DialogFooter>
-                        <Button onClick={handleUpdateCamera}>Save Changes</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteCamera(camera.id)}
-                  >
-                    <Trash className="h-4 w-4" />
-                  </Button>
+                        )}
+                        <DialogFooter>
+                          <Button onClick={handleUpdateCamera}>Save Changes</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteCamera(camera.id)}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

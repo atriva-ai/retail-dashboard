@@ -6,10 +6,10 @@
 const getApiBaseUrl = () => {
   // If we're on the server-side (in Docker), use the internal service name
   if (typeof window === 'undefined') {
-    return process.env.INTERNAL_API_URL || "http://backend:8000"
+    return process.env.INTERNAL_API_URL || "http://nginx/api"
   }
   // If we're on the client-side (browser), use the public URL
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost/api"
 }
 
 const API_BASE_URL = getApiBaseUrl()

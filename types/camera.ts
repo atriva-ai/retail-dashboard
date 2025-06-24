@@ -1,12 +1,14 @@
+// Backend camera interface
 export interface Camera {
   id: number
   name: string
   rtsp_url: string
   location: string | null
   is_active: boolean
-  zone_ids: number[]
+  video_info: any
   created_at: string
   updated_at: string
+  zone_ids: number[]
 }
 
 // Frontend-specific interface for display
@@ -17,4 +19,5 @@ export interface CameraDisplay {
   ipAddress: string
   status: "online" | "offline" | "warning"
   analyticsEnabled: boolean
+  video_info?: any
 } 

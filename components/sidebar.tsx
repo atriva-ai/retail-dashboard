@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from "./sidebar-provider"
 import { Badge } from "./ui/badge"
-import { useStoreName } from "@/hooks/use-store-name"
 // edited for adding store name input
 import { useApi } from "@/hooks/use-api"
 import { apiClient } from "@/lib/api" // where API call wrappers go
@@ -61,12 +60,12 @@ const navItems = [
 
 // -- get and post functions for store name
 async function fetchStore() {
-  const response = await apiClient.get<{ name: string }>("/api/store")
+  const response = await apiClient.get<{ name: string }>("/api/v1/store/")
   return response
 }
 
 async function updateStoreName(data: { name: string }) {
-  const response = await apiClient.post<{ name: string }>("/api/store", data)
+  const response = await apiClient.post<{ name: string }>("/api/v1/store/", data)
   return response
 }
 
