@@ -80,11 +80,30 @@ export default function Sidebar() {
   const [editing, setEditing] = useState(false)
   const [storeName, setStoreName] = useState("")
 
+  // Camera count state
+  const [cameraCount, setCameraCount] = useState<number | null>(null)
+
   useEffect(() => {
     if (data?.name) {
       setStoreName(data.name)
     }
   }, [data])
+
+  // Fetch camera count with polling
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    async function fetchCameraCount() {
+      try {
+        const response = await apiClient.get<any[]>("/api/v1/cameras/")
+        setCameraCount(response?.length ?? 0)
+      } catch {
+        setCameraCount(null)
+      }
+    }
+    fetchCameraCount();
+    interval = setInterval(fetchCameraCount, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSave = async () => {
     const result = await saveStore({ name: storeName })
@@ -92,6 +111,13 @@ export default function Sidebar() {
       setEditing(false)
     }
   }
+
+  // Dynamically set badge for Live Cameras
+  const navItemsWithCameraCount = navItems.map((item) =>
+    item.title === "Live Cameras"
+      ? { ...item, badge: cameraCount !== null ? String(cameraCount) : undefined }
+      : item
+  )
 
   return (
     <div
@@ -112,7 +138,7 @@ export default function Sidebar() {
       </div>
       <div className="py-4">
         <nav className="space-y-1 px-2">
-          {navItems.map((item) => (
+          {navItemsWithCameraCount.map((item) => (
             <Link
               key={item.href}
               href={item.href}

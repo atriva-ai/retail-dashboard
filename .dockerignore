@@ -17,8 +17,8 @@ yarn-error.log*
 .idea
 .vscode
 
-# Build output
-.next
+# Build output (excluded via volume mount in development)
+# .next
 out
 coverage
 dist
