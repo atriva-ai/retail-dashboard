@@ -37,7 +37,7 @@ export default function AnalyticsSettings() {
   const [editingAnalytics, setEditingAnalytics] = useState<Analytics | null>(null)
   const [newAnalytics, setNewAnalytics] = useState({
     name: "",
-    type: "",
+    type: undefined as string | undefined,
     config: {},
     is_active: true
   })
@@ -125,15 +125,17 @@ export default function AnalyticsSettings() {
       const config = typeConfig ? typeConfig.defaultConfig : {}
       
       const result = await createAnalytics({
-        ...newAnalytics,
-        config
+        name: newAnalytics.name,
+        type: newAnalytics.type,
+        config,
+        is_active: newAnalytics.is_active
       })
       if (result) {
         toast({
           title: "Success",
           description: "Analytics configuration created successfully",
         })
-        setNewAnalytics({ name: "", type: "", config: {}, is_active: true })
+        setNewAnalytics({ name: "", type: undefined, config: {}, is_active: true })
         setIsAddDialogOpen(false)
       } else {
         toast({
@@ -142,6 +144,12 @@ export default function AnalyticsSettings() {
           variant: "destructive",
         })
       }
+    } else {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields (Name and Analytics Type)",
+        variant: "destructive",
+      })
     }
   }
 
@@ -303,7 +311,7 @@ export default function AnalyticsSettings() {
                   <div>
                     <Label htmlFor="type">Analytics Type</Label>
                     <Select
-                      value={newAnalytics.type}
+                      value={newAnalytics.type || undefined}
                       onValueChange={(value) => {
                         const typeConfig = predefinedTypes.find(t => t.type === value)
                         setNewAnalytics({ 

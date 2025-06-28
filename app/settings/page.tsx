@@ -3,7 +3,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import CameraSettings from "@/components/settings/camera-settings"
-import AnalyticsSettings from "@/components/settings/analytics-settings"
+import AnalyticsEnginesSettings from "@/components/settings/analytics-engines-settings"
 import ZoneSettings from "@/components/settings/zone-settings"
 import GeneralSettings from "@/components/settings/general-settings"
 
@@ -41,7 +41,7 @@ export default function SettingsPage() {
               <CardDescription>Configure analytics engines and detection parameters</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <AnalyticsSettings />
+              <AnalyticsEnginesSettings />
             </CardContent>
           </Card>
         </TabsContent>

@@ -312,25 +312,21 @@ export default function CameraSettings() {
           description: "Camera stream is being stopped...",
         })
       } else {
-        // Start streaming
+        // Start streaming - always show "Starting..." initially
+        setCameras(prev => prev.map(c => 
+          c.id === camera.id 
+            ? { ...c, stream_status: 'starting', is_active: false }
+            : c
+        ))
+        
         const response = await apiClient.post<ActivateCameraResponse>(`/api/v1/cameras/${camera.id}/activate/`)
         
         if (response && response.activation) {
           const activation = response.activation
           
-          // Update local state based on activation response
-          setCameras(prev => prev.map(c => 
-            c.id === camera.id 
-              ? { 
-                  ...c, 
-                  stream_status: activation.status === 'started' ? 'starting' : activation.status,
-                  is_active: activation.status === 'started' || activation.status === 'active'
-                }
-              : c
-          ))
-          
-          if (activation.status === 'started' || activation.status === 'active') {
-            // Start polling to track starting progress
+          // Only update status if it's a clear success or if there are specific errors
+          if (activation.status === 'activated' || activation.status === 'already_running') {
+            // Success - keep "starting" status and let polling update it
             startStatusPolling(camera.id)
             
             toast({
@@ -338,6 +334,13 @@ export default function CameraSettings() {
               description: "Camera stream is being started...",
             })
           } else if (activation.errors && activation.errors.length > 0) {
+            // Clear failure - show error
+            setCameras(prev => prev.map(c => 
+              c.id === camera.id 
+                ? { ...c, stream_status: 'error', is_active: false }
+                : c
+            ))
+            
             toast({
               title: "Activation Failed",
               description: `Failed to start stream: ${activation.errors.join(", ")}`,
@@ -348,11 +351,37 @@ export default function CameraSettings() {
               delete newProcessing[camera.id]
               return newProcessing
             })
+          } else {
+            // Ambiguous status - keep "starting" and let polling determine the final status
+            startStatusPolling(camera.id)
+            
+            toast({
+              title: "Starting Stream",
+              description: "Camera stream is being started...",
+            })
           }
+        } else {
+          // No response - keep "starting" status and let polling update it
+          startStatusPolling(camera.id)
+          
+          toast({
+            title: "Starting Stream",
+            description: "Camera stream is being started...",
+          })
         }
       }
     } catch (error) {
       console.error('Toggle streaming error:', error)
+      
+      // Only show error if we were starting (not if we were stopping)
+      if (!isCurrentlyActive) {
+        setCameras(prev => prev.map(c => 
+          c.id === camera.id 
+            ? { ...c, stream_status: 'error', is_active: false }
+            : c
+        ))
+      }
+      
       toast({
         title: "Error",
         description: `Failed to ${isCurrentlyActive ? 'stop' : 'start'} camera stream`,
@@ -379,10 +408,12 @@ export default function CameraSettings() {
     
     try {
       // Get the latest frame using the snapshot endpoint
-      const frameResponse = await fetch(`/api/v1/cameras/${camera.id}/latest-frame/`)
-      if (frameResponse.ok) {
-        const blob = await frameResponse.blob()
-        const imageUrl = URL.createObjectURL(blob)
+      const frameResponse = await apiClient.get<Blob>(`/api/v1/cameras/${camera.id}/latest-frame/`, {
+        responseType: 'blob'
+      })
+      
+      if (frameResponse) {
+        const imageUrl = URL.createObjectURL(frameResponse)
         
         // Get decode status for frame count
         const statusResponse = await apiClient.get<DecodeStatusResponse>(`/api/v1/cameras/${camera.id}/decode-status/`)
@@ -397,6 +428,7 @@ export default function CameraSettings() {
         })
       }
     } catch (error) {
+      console.error('Failed to load snapshot:', error)
       toast({
         title: "Error",
         description: "Failed to load snapshot preview",

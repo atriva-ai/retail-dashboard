@@ -4,7 +4,7 @@
 
 // API base URL - handle both server-side (Docker) and client-side (browser) environments
 const getApiBaseUrl = () => {
-  // If we're on the server-side (in Docker), use the internal service name
+  // If we're on the server-side (Docker), use the internal service name
   if (typeof window === 'undefined') {
     return process.env.INTERNAL_API_URL || "http://nginx/api"
   }
@@ -89,21 +89,39 @@ export const apiClient = {
   /**
    * GET request
    */
-  async get<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
+  async get<T>(endpoint: string, params?: Record<string, string> | { responseType?: string }): Promise<T> {
     const url = new URL(`${API_BASE_URL}${endpoint}`)
-
+    
+    // Handle responseType parameter
+    let responseType = 'json'
+    let queryParams: Record<string, string> = {}
+    
     if (params) {
-      Object.entries(params).forEach(([key, value]) => {
+      if ('responseType' in params) {
+        responseType = params.responseType || 'json'
+        queryParams = { ...params }
+        delete queryParams.responseType
+      } else {
+        queryParams = params
+      }
+    }
+
+    if (queryParams) {
+      Object.entries(queryParams).forEach(([key, value]) => {
         url.searchParams.append(key, value)
       })
     }
 
     const response = await fetchWithTimeout(url.toString(), {
       method: "GET",
-      headers: defaultHeaders,
+      headers: responseType === 'blob' ? {} : defaultHeaders,
       credentials: "include",
     })
 
+    if (responseType === 'blob') {
+      return response.blob() as T
+    }
+    
     return response.json()
   },
 
@@ -150,6 +168,11 @@ export const apiClient = {
       headers: defaultHeaders,
       credentials: "include",
     })
+
+    // Handle 204 No Content responses
+    if (response.status === 204) {
+      return {} as T
+    }
 
     return response.json()
   },
