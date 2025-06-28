@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import CameraSettings from "@/components/settings/camera-settings"
 import AnalyticsEnginesSettings from "@/components/settings/analytics-engines-settings"
-import ZoneSettings from "@/components/settings/zone-settings"
+import AlertEnginesSettings from "@/components/settings/alert-engines-settings"
 import GeneralSettings from "@/components/settings/general-settings"
 
 export default function SettingsPage() {
@@ -18,7 +18,7 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="cameras">Cameras</TabsTrigger>
           <TabsTrigger value="analytics">Analytics Engines</TabsTrigger>
-          <TabsTrigger value="zones">Zones</TabsTrigger>
+          <TabsTrigger value="alerts">Alert Engines</TabsTrigger>
           <TabsTrigger value="general">General</TabsTrigger>
         </TabsList>
 
@@ -46,14 +46,14 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="zones" className="space-y-4">
+        <TabsContent value="alerts" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Zone Configuration</CardTitle>
-              <CardDescription>Create and manage zones for analytics and monitoring</CardDescription>
+              <CardTitle>Alert Engine Configuration</CardTitle>
+              <CardDescription>Configure alert engines for real-time monitoring and notifications</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <ZoneSettings />
+              <AlertEnginesSettings />
             </CardContent>
           </Card>
         </TabsContent>
