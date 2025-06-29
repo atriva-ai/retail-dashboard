@@ -26,10 +26,11 @@ interface Camera {
   rtsp_url: string
   location: string | null
   is_active: boolean
+  streaming_status: string // "stopped", "starting", "streaming", "stopping", "error"
   video_info: any
   created_at: string
   updated_at: string
-  stream_status?: string
+  stream_status?: string // legacy field
   frame_count?: number
 }
 
@@ -57,6 +58,8 @@ interface ActivateCameraResponse {
 interface DecodeStatusResponse {
   camera_id: string
   status: string
+  streaming_status: string
+  is_active: boolean
   frame_count: number
   last_error?: string
 }
@@ -106,15 +109,15 @@ export default function CameraSettings() {
           c.id === cameraId 
             ? { 
                 ...c, 
-                stream_status: response.status === 'completed' ? 'active' : response.status,
-                frame_count: response.frame_count,
-                is_active: response.status === 'active' || response.status === 'completed'
+                streaming_status: response.streaming_status,
+                is_active: response.is_active,
+                frame_count: response.frame_count
               }
             : c
         ))
         
         // Only stop polling if decode failed or was explicitly stopped
-        if (response.status === 'error' || response.status === 'stopped') {
+        if (response.streaming_status === 'error' || response.streaming_status === 'stopped') {
           if (statusPolling[cameraId]) {
             clearInterval(statusPolling[cameraId])
             setStatusPolling(prev => {
@@ -129,7 +132,7 @@ export default function CameraSettings() {
             delete newProcessing[cameraId]
             return newProcessing
           })
-        } else if (response.status === 'completed' || response.status === 'active') {
+        } else if (response.streaming_status === 'streaming') {
           // Clear processing state but keep polling for active cameras
           setProcessingCameras(prev => {
             const newProcessing = { ...prev }
@@ -174,7 +177,7 @@ export default function CameraSettings() {
   // Start polling for all active cameras
   const startPollingForActiveCameras = useCallback(() => {
     cameras.forEach(camera => {
-      if (camera.stream_status === 'active' || camera.stream_status === 'starting' || (camera.frame_count && camera.frame_count > 0)) {
+      if (camera.streaming_status === 'streaming' || camera.streaming_status === 'starting' || (camera.frame_count && camera.frame_count > 0)) {
         if (!statusPolling[camera.id]) {
           startStatusPolling(camera.id)
         }
@@ -288,10 +291,13 @@ export default function CameraSettings() {
   }
 
   const handleToggleStreaming = async (camera: Camera) => {
-    const isCurrentlyActive = camera.stream_status === 'active' || (camera.frame_count && camera.frame_count > 0)
-    
+    if (processingCameras[camera.id]) return
+
+    setProcessingCameras(prev => ({ ...prev, [camera.id]: true }))
+
     try {
-      setProcessingCameras(prev => ({ ...prev, [camera.id]: true }))
+      // Check if camera is currently active based on streaming_status
+      const isCurrentlyActive = camera.streaming_status === 'streaming' || camera.is_active
       
       if (isCurrentlyActive) {
         // Stop streaming
@@ -300,7 +306,7 @@ export default function CameraSettings() {
         // Update local state immediately
         setCameras(prev => prev.map(c => 
           c.id === camera.id 
-            ? { ...c, stream_status: 'stopping', is_active: false }
+            ? { ...c, streaming_status: 'stopping', is_active: false }
             : c
         ))
         
@@ -315,7 +321,7 @@ export default function CameraSettings() {
         // Start streaming - always show "Starting..." initially
         setCameras(prev => prev.map(c => 
           c.id === camera.id 
-            ? { ...c, stream_status: 'starting', is_active: false }
+            ? { ...c, streaming_status: 'starting', is_active: false }
             : c
         ))
         
@@ -337,7 +343,7 @@ export default function CameraSettings() {
             // Clear failure - show error
             setCameras(prev => prev.map(c => 
               c.id === camera.id 
-                ? { ...c, stream_status: 'error', is_active: false }
+                ? { ...c, streaming_status: 'error', is_active: false }
                 : c
             ))
             
@@ -371,22 +377,20 @@ export default function CameraSettings() {
         }
       }
     } catch (error) {
-      console.error('Toggle streaming error:', error)
-      
-      // Only show error if we were starting (not if we were stopping)
-      if (!isCurrentlyActive) {
-        setCameras(prev => prev.map(c => 
-          c.id === camera.id 
-            ? { ...c, stream_status: 'error', is_active: false }
-            : c
-        ))
-      }
-      
+      console.error('Error toggling streaming:', error)
       toast({
         title: "Error",
-        description: `Failed to ${isCurrentlyActive ? 'stop' : 'start'} camera stream`,
+        description: "Failed to toggle streaming",
         variant: "destructive",
       })
+      
+      // Reset status on error
+      setCameras(prev => prev.map(c => 
+        c.id === camera.id 
+          ? { ...c, streaming_status: 'error', is_active: false }
+          : c
+      ))
+    } finally {
       setProcessingCameras(prev => {
         const newProcessing = { ...prev }
         delete newProcessing[camera.id]
@@ -448,16 +452,16 @@ export default function CameraSettings() {
           c.id === camera.id 
             ? { 
                 ...c, 
-                stream_status: response.status === 'completed' ? 'active' : response.status,
-                frame_count: response.frame_count,
-                is_active: response.status === 'active' || response.status === 'completed'
+                streaming_status: response.streaming_status,
+                is_active: response.is_active,
+                frame_count: response.frame_count
               }
             : c
         ))
         
         toast({
           title: "Status Updated",
-          description: `Camera status refreshed successfully. Current status: ${response.status}`,
+          description: `Camera status refreshed successfully. Current status: ${response.streaming_status}`,
         })
       }
     } catch (error) {
@@ -561,15 +565,15 @@ export default function CameraSettings() {
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          variant={(camera.stream_status === 'active' || (camera.frame_count && camera.frame_count > 0)) ? 'destructive' : 'default'}
+                          variant={camera.streaming_status === 'streaming' ? 'destructive' : 'default'}
                           onClick={() => handleToggleStreaming(camera)}
                           disabled={
-                            camera.stream_status === 'starting' || 
-                            camera.stream_status === 'stopping' || 
+                            camera.streaming_status === 'starting' || 
+                            camera.streaming_status === 'stopping' || 
                             processingCameras[camera.id]
                           }
                         >
-                          {(camera.stream_status === 'active' || (camera.frame_count && camera.frame_count > 0)) ? 'Stop' : 'Start'} Streaming
+                          {camera.streaming_status === 'streaming' ? 'Stop' : 'Start'} Streaming
                         </Button>
                         <Button
                           size="sm"
@@ -584,18 +588,18 @@ export default function CameraSettings() {
                       <div className="text-sm">
                         <span className="font-medium">Status: </span>
                         <span className={
-                          camera.stream_status === 'active' || (camera.frame_count && camera.frame_count > 0) ? 'text-green-600' :
-                          camera.stream_status === 'starting' ? 'text-yellow-600' :
-                          camera.stream_status === 'stopping' ? 'text-yellow-600' :
-                          camera.stream_status === 'error' ? 'text-red-600' :
+                          camera.streaming_status === 'streaming' ? 'text-green-600' :
+                          camera.streaming_status === 'starting' ? 'text-yellow-600' :
+                          camera.streaming_status === 'stopping' ? 'text-yellow-600' :
+                          camera.streaming_status === 'error' ? 'text-red-600' :
                           'text-gray-600'
                         }>
-                          {(camera.stream_status === 'active' || (camera.frame_count && camera.frame_count > 0)) && 'Active'}
-                          {camera.stream_status === 'starting' && 'Starting...'}
-                          {camera.stream_status === 'stopping' && 'Stopping...'}
-                          {camera.stream_status === 'stopped' && 'Stopped'}
-                          {camera.stream_status === 'error' && 'Error'}
-                          {!camera.stream_status && !camera.frame_count && (camera.is_active ? 'Active' : 'Stopped')}
+                          {camera.streaming_status === 'streaming' && 'Streaming'}
+                          {camera.streaming_status === 'starting' && 'Starting...'}
+                          {camera.streaming_status === 'stopping' && 'Stopping...'}
+                          {camera.streaming_status === 'stopped' && 'Stopped'}
+                          {camera.streaming_status === 'error' && 'Error'}
+                          {!camera.streaming_status && (camera.is_active ? 'Active' : 'Stopped')}
                           {processingCameras[camera.id] && 'Processing...'}
                         </span>
                       </div>

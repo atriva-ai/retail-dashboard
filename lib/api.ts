@@ -180,7 +180,7 @@ export const apiClient = {
 
 // Fetch store name from backend
 export async function fetchStoreName() {
-  const response = await apiClient.get<{ name: string }>("/api/v1/store")
+  const response = await apiClient.get<{ name: string }>("/v1/store")
   return response.name
 }
 
