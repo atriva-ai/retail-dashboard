@@ -151,6 +151,13 @@ export default function CameraGrid() {
   const updateSnapshots = useCallback(async () => {
     const updatedCameras = await Promise.all(
       cameras.map(async (camera) => {
+        // Only fetch snapshot if camera is streaming
+        if (camera.decoderStatus?.streaming_status !== 'streaming') {
+          return {
+            ...camera,
+            snapshotUrl: undefined // Clear snapshot if not streaming
+          }
+        }
         const snapshotUrl = await fetchSnapshot(camera.id)
         return {
           ...camera,

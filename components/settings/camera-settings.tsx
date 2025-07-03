@@ -79,127 +79,45 @@ export default function CameraSettings() {
   const [selectedCameraForPreview, setSelectedCameraForPreview] = useState<Camera | null>(null)
   const [framePreviewData, setFramePreviewData] = useState<{imageUrl: string, frameCount: number} | null>(null)
   const [framePreviewLoading, setFramePreviewLoading] = useState(false)
-  const [statusPolling, setStatusPolling] = useState<{[key: number]: NodeJS.Timeout}>({})
-  const [processingCameras, setProcessingCameras] = useState<{[key: number]: boolean}>({})
-  const [refreshingCameras, setRefreshingCameras] = useState<{[key: number]: boolean}>({})
   const { toast } = useToast()
 
+  // Fetch cameras and their decode status once when entering the page
   const fetchCameras = async () => {
+    setLoading(true);
     try {
-      const response = await apiClient.get<Camera[]>('/api/v1/cameras/')
-      setCameras(response || [])
+      const response = await apiClient.get<Camera[]>('/api/v1/cameras/');
+      const camerasWithStatus = await Promise.all(
+        (response || []).map(async (camera) => {
+          try {
+            const status = await apiClient.get<DecodeStatusResponse>(`/api/v1/cameras/${camera.id}/decode-status/`);
+            return {
+              ...camera,
+              streaming_status: status.streaming_status,
+              is_active: status.is_active,
+              frame_count: status.frame_count,
+            };
+          } catch (err) {
+            // If status fetch fails, just return the camera as-is
+            return camera;
+          }
+        })
+      );
+      setCameras(camerasWithStatus);
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to fetch cameras",
         variant: "destructive",
-      })
-      setCameras([])
+      });
+      setCameras([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
-
-  // Poll decode status for cameras that are starting or running
-  const pollDecodeStatus = useCallback(async (cameraId: number) => {
-    try {
-      const response = await apiClient.get<DecodeStatusResponse>(`/api/v1/cameras/${cameraId}/decode-status/`)
-      if (response) {
-        setCameras(prev => prev.map(c => 
-          c.id === cameraId 
-            ? { 
-                ...c, 
-                streaming_status: response.streaming_status,
-                is_active: response.is_active,
-                frame_count: response.frame_count
-              }
-            : c
-        ))
-        
-        // Only stop polling if decode failed or was explicitly stopped
-        if (response.streaming_status === 'error' || response.streaming_status === 'stopped') {
-          if (statusPolling[cameraId]) {
-            clearInterval(statusPolling[cameraId])
-            setStatusPolling(prev => {
-              const newPolling = { ...prev }
-              delete newPolling[cameraId]
-              return newPolling
-            })
-          }
-          // Clear processing state
-          setProcessingCameras(prev => {
-            const newProcessing = { ...prev }
-            delete newProcessing[cameraId]
-            return newProcessing
-          })
-        } else if (response.streaming_status === 'streaming') {
-          // Clear processing state but keep polling for active cameras
-          setProcessingCameras(prev => {
-            const newProcessing = { ...prev }
-            delete newProcessing[cameraId]
-            return newProcessing
-          })
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to poll status for camera ${cameraId}:`, error)
-      // Clear processing state on error
-      setProcessingCameras(prev => {
-        const newProcessing = { ...prev }
-        delete newProcessing[cameraId]
-        return newProcessing
-      })
-    }
-  }, [statusPolling])
-
-  // Start polling for a camera
-  const startStatusPolling = useCallback((cameraId: number) => {
-    if (statusPolling[cameraId]) {
-      clearInterval(statusPolling[cameraId])
-    }
-    
-    const interval = setInterval(() => pollDecodeStatus(cameraId), 2000) // Poll every 2 seconds
-    setStatusPolling(prev => ({ ...prev, [cameraId]: interval }))
-  }, [statusPolling, pollDecodeStatus])
-
-  // Stop polling for a camera
-  const stopStatusPolling = useCallback((cameraId: number) => {
-    if (statusPolling[cameraId]) {
-      clearInterval(statusPolling[cameraId])
-      setStatusPolling(prev => {
-        const newPolling = { ...prev }
-        delete newPolling[cameraId]
-        return newPolling
-      })
-    }
-  }, [statusPolling])
-
-  // Start polling for all active cameras
-  const startPollingForActiveCameras = useCallback(() => {
-    cameras.forEach(camera => {
-      if (camera.streaming_status === 'streaming' || camera.streaming_status === 'starting' || (camera.frame_count && camera.frame_count > 0)) {
-        if (!statusPolling[camera.id]) {
-          startStatusPolling(camera.id)
-        }
-      }
-    })
-  }, [cameras, statusPolling, startStatusPolling])
+  };
 
   useEffect(() => {
-    fetchCameras()
-    
-    // Cleanup polling on unmount
-    return () => {
-      Object.values(statusPolling).forEach(interval => clearInterval(interval))
-    }
-  }, [statusPolling])
-
-  // Start polling for active cameras when cameras list changes
-  useEffect(() => {
-    if (cameras.length > 0) {
-      startPollingForActiveCameras()
-    }
-  }, [cameras, startPollingForActiveCameras])
+    fetchCameras();
+  }, []);
 
   const handleAddCamera = async () => {
     if (newCamera.name && newCamera.rtsp_url) {
@@ -274,12 +192,6 @@ export default function CameraSettings() {
         title: "Success",
         description: "Camera deleted successfully",
       })
-      stopStatusPolling(id)
-      setProcessingCameras(prev => {
-        const newProcessing = { ...prev }
-        delete newProcessing[id]
-        return newProcessing
-      })
       fetchCameras()
     } catch (error) {
       toast({
@@ -291,10 +203,6 @@ export default function CameraSettings() {
   }
 
   const handleToggleStreaming = async (camera: Camera) => {
-    if (processingCameras[camera.id]) return
-
-    setProcessingCameras(prev => ({ ...prev, [camera.id]: true }))
-
     try {
       // Check if camera is currently active based on streaming_status
       const isCurrentlyActive = camera.streaming_status === 'streaming' || camera.is_active
@@ -309,9 +217,6 @@ export default function CameraSettings() {
             ? { ...c, streaming_status: 'stopping', is_active: false }
             : c
         ))
-        
-        // Start polling to track stopping progress
-        startStatusPolling(camera.id)
         
         toast({
           title: "Stopping Stream",
@@ -352,11 +257,6 @@ export default function CameraSettings() {
               description: `Failed to start stream: ${activation.errors.join(", ")}`,
               variant: "destructive",
             })
-            setProcessingCameras(prev => {
-              const newProcessing = { ...prev }
-              delete newProcessing[camera.id]
-              return newProcessing
-            })
           } else {
             // Ambiguous status - keep "starting" and let polling determine the final status
             startStatusPolling(camera.id)
@@ -390,12 +290,6 @@ export default function CameraSettings() {
           ? { ...c, streaming_status: 'error', is_active: false }
           : c
       ))
-    } finally {
-      setProcessingCameras(prev => {
-        const newProcessing = { ...prev }
-        delete newProcessing[camera.id]
-        return newProcessing
-      })
     }
   }
 
@@ -445,7 +339,6 @@ export default function CameraSettings() {
 
   const handleRefreshStatus = async (camera: Camera) => {
     try {
-      setRefreshingCameras(prev => ({ ...prev, [camera.id]: true }))
       const response = await apiClient.get<DecodeStatusResponse>(`/api/v1/cameras/${camera.id}/decode-status/`)
       if (response) {
         setCameras(prev => prev.map(c => 
@@ -469,12 +362,6 @@ export default function CameraSettings() {
         title: "Error",
         description: "Failed to refresh status",
         variant: "destructive",
-      })
-    } finally {
-      setRefreshingCameras(prev => {
-        const newRefreshing = { ...prev }
-        delete newRefreshing[camera.id]
-        return newRefreshing
       })
     }
   }
@@ -569,8 +456,7 @@ export default function CameraSettings() {
                           onClick={() => handleToggleStreaming(camera)}
                           disabled={
                             camera.streaming_status === 'starting' || 
-                            camera.streaming_status === 'stopping' || 
-                            processingCameras[camera.id]
+                            camera.streaming_status === 'stopping'
                           }
                         >
                           {camera.streaming_status === 'streaming' ? 'Stop' : 'Start'} Streaming
@@ -579,9 +465,8 @@ export default function CameraSettings() {
                           size="sm"
                           variant="outline"
                           onClick={() => handleRefreshStatus(camera)}
-                          disabled={processingCameras[camera.id] || refreshingCameras[camera.id]}
                         >
-                          <RefreshCw className={`h-3 w-3 mr-1 ${refreshingCameras[camera.id] ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`h-3 w-3 mr-1`} />
                           Refresh
                         </Button>
                       </div>
@@ -600,7 +485,6 @@ export default function CameraSettings() {
                           {camera.streaming_status === 'stopped' && 'Stopped'}
                           {camera.streaming_status === 'error' && 'Error'}
                           {!camera.streaming_status && (camera.is_active ? 'Active' : 'Stopped')}
-                          {processingCameras[camera.id] && 'Processing...'}
                         </span>
                       </div>
                       {camera.frame_count !== undefined && camera.frame_count > 0 && (

@@ -2,14 +2,9 @@
  * Base API configuration and utility functions
  */
 
-// API base URL - handle both server-side (Docker) and client-side (browser) environments
+// API base URL - simplified since all calls are client-side
 const getApiBaseUrl = () => {
-  // If we're on the server-side (Docker), use the internal service name
-  if (typeof window === 'undefined') {
-    return process.env.INTERNAL_API_URL || "http://nginx/api"
-  }
-  // If we're on the client-side (browser), use the public URL
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost/api"
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost"
 }
 
 const API_BASE_URL = getApiBaseUrl()
@@ -17,7 +12,6 @@ const API_BASE_URL = getApiBaseUrl()
 // Debug log the API base URL
 console.log('🔧 API Base URL:', API_BASE_URL)
 console.log('🔧 Environment:', process.env.NODE_ENV)
-console.log('🔧 Internal API URL:', process.env.INTERNAL_API_URL)
 console.log('🔧 Public API URL:', process.env.NEXT_PUBLIC_API_URL)
 console.log('🔧 Is Server Side:', typeof window === 'undefined')
 
