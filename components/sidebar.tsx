@@ -8,10 +8,8 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
-  CircleUser,
   Home,
   Settings,
-  ShoppingBag,
   Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -37,19 +35,9 @@ const navItems = [
     badge: "16",
   },
   {
-    title: "Product Analytics",
-    href: "/product-analytics",
-    icon: ShoppingBag,
-  },
-  {
     title: "Person Activity",
     href: "/person-activity",
     icon: Users,
-  },
-  {
-    title: "Staff Monitoring",
-    href: "/staff-monitoring",
-    icon: CircleUser,
   },
   {
     title: "Settings",
