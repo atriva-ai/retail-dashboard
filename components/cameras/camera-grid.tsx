@@ -137,11 +137,15 @@ export default function CameraGrid() {
   const fetchSnapshot = useCallback(async (cameraId: number) => {
     try {
       const response = await apiClient.get<Blob>(`/api/v1/cameras/${cameraId}/latest-frame/`, { responseType: 'blob' })
-      if (response instanceof Blob) {
+      if (response instanceof Blob && response.size > 0) {
         return URL.createObjectURL(response)
       }
       return null
-    } catch (error) {
+    } catch (error: any) {
+      // 404 is expected when no frames are available - don't log as error
+      if (error?.message?.includes('404') || error?.status === 404) {
+        return null
+      }
       console.error(`Error fetching snapshot for camera ${cameraId}:`, error)
       return null
     }
