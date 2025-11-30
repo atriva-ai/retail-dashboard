@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -137,36 +137,27 @@ export default function CameraGrid() {
   const fetchSnapshot = useCallback(async (cameraId: number) => {
     try {
       const response = await apiClient.get<Blob>(`/api/v1/cameras/${cameraId}/latest-frame/`, { responseType: 'blob' })
-      if (response instanceof Blob) {
+      if (response instanceof Blob && response.size > 0) {
         return URL.createObjectURL(response)
       }
       return null
-    } catch (error) {
+    } catch (error: any) {
+      // 404 is expected when no frames are available - don't log as error
+      if (error?.message?.includes('404') || error?.status === 404) {
+        return null
+      }
       console.error(`Error fetching snapshot for camera ${cameraId}:`, error)
       return null
     }
   }, [])
 
-  // Update snapshots for all cameras
-  const updateSnapshots = useCallback(async () => {
-    const updatedCameras = await Promise.all(
-      cameras.map(async (camera) => {
-        // Only fetch snapshot if camera is streaming
-        if (camera.decoderStatus?.streaming_status !== 'streaming') {
-          return {
-            ...camera,
-            snapshotUrl: undefined // Clear snapshot if not streaming
-          }
-        }
-        const snapshotUrl = await fetchSnapshot(camera.id)
-        return {
-          ...camera,
-          snapshotUrl: snapshotUrl || camera.snapshotUrl
-        }
-      })
-    )
-    setCameras(updatedCameras)
-  }, [cameras, fetchSnapshot])
+  // Ref to hold current cameras for async operations (avoids stale closure)
+  const camerasRef = useRef<CameraDisplay[]>([])
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    camerasRef.current = cameras
+  }, [cameras])
 
   // Initial data fetch
   useEffect(() => {
@@ -175,30 +166,49 @@ export default function CameraGrid() {
 
   // Set up snapshot refresh interval
   useEffect(() => {
-    if (cameras.length === 0) return
+    let isMounted = true
 
-    // Initial snapshot fetch
-    updateSnapshots()
+    const runSnapshotUpdate = async () => {
+      const currentCameras = camerasRef.current
+      if (currentCameras.length === 0) return
+      
+      try {
+        const updatedCameras = await Promise.all(
+          currentCameras.map(async (camera) => {
+            if (camera.decoderStatus?.streaming_status !== 'streaming') {
+              return { ...camera, snapshotUrl: undefined }
+            }
+            const snapshotUrl = await fetchSnapshot(camera.id)
+            return { ...camera, snapshotUrl: snapshotUrl || camera.snapshotUrl }
+          })
+        )
+        
+        if (isMounted) {
+          setCameras(updatedCameras)
+        }
+      } catch (error) {
+        console.error('Error updating snapshots:', error)
+      }
+    }
 
-    // Set up 5-second interval for snapshots only
-    const snapshotInterval = setInterval(updateSnapshots, 5000)
+    // Initial snapshot fetch after cameras are loaded
+    const initialTimeout = setTimeout(runSnapshotUpdate, 1000)
+    
+    // Set up 5-second interval for snapshots
+    const snapshotInterval = setInterval(runSnapshotUpdate, 5000)
 
     return () => {
+      isMounted = false
+      clearTimeout(initialTimeout)
       clearInterval(snapshotInterval)
     }
-  }, [cameras.length, updateSnapshots])
+  }, [fetchSnapshot])
 
   // Set up status refresh interval (separate from snapshots)
   useEffect(() => {
-    if (cameras.length === 0) return
-
-    // Set up 10-second interval for status updates (metadata only, no snapshots)
     const statusInterval = setInterval(fetchCamerasWithData, 10000)
-
-    return () => {
-      clearInterval(statusInterval)
-    }
-  }, [cameras.length, fetchCamerasWithData])
+    return () => clearInterval(statusInterval)
+  }, [fetchCamerasWithData])
 
   if (isLoading) {
     return <div className="text-center p-4">Loading cameras...</div>

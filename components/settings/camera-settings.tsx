@@ -72,6 +72,7 @@ export default function CameraSettings() {
     name: "",
     rtsp_url: "",
     location: "",
+    is_active: true, // Default to active so video pipeline starts automatically
   })
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -119,6 +120,48 @@ export default function CameraSettings() {
     fetchCameras();
   }, []);
 
+  // Poll status for a camera after activation until it stabilizes
+  const startStatusPolling = (cameraId: number) => {
+    let pollCount = 0;
+    const maxPolls = 10; // Poll up to 10 times (30 seconds total)
+    
+    const pollStatus = async () => {
+      try {
+        const response = await apiClient.get<DecodeStatusResponse>(`/api/v1/cameras/${cameraId}/decode-status/`);
+        if (response) {
+          setCameras(prev => prev.map(c => 
+            c.id === cameraId 
+              ? { 
+                  ...c, 
+                  streaming_status: response.streaming_status,
+                  is_active: response.is_active,
+                  frame_count: response.frame_count
+                }
+              : c
+          ));
+          
+          // Stop polling if we have a stable status
+          if (response.streaming_status === 'streaming' || 
+              response.streaming_status === 'stopped' || 
+              response.streaming_status === 'error') {
+            return; // Don't schedule another poll
+          }
+        }
+      } catch (error) {
+        console.error('Error polling status:', error);
+      }
+      
+      // Continue polling if not at max and status is still transitioning
+      pollCount++;
+      if (pollCount < maxPolls) {
+        setTimeout(pollStatus, 3000); // Poll every 3 seconds
+      }
+    };
+    
+    // Start polling after a short delay
+    setTimeout(pollStatus, 2000);
+  };
+
   const handleAddCamera = async () => {
     if (newCamera.name && newCamera.rtsp_url) {
       try {
@@ -151,6 +194,7 @@ export default function CameraSettings() {
           name: "",
           rtsp_url: "",
           location: "",
+          is_active: true, // Reset to default
         })
         setIsAddDialogOpen(false)
         fetchCameras()
@@ -419,6 +463,21 @@ export default function CameraSettings() {
                   onChange={(e) => setNewCamera({ ...newCamera, location: e.target.value })}
                   className="col-span-3"
                 />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="is_active" className="text-right">
+                  Activate
+                </Label>
+                <div className="col-span-3 flex items-center gap-2">
+                  <Switch
+                    id="is_active"
+                    checked={newCamera.is_active ?? true}
+                    onCheckedChange={(checked) => setNewCamera({ ...newCamera, is_active: checked })}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {newCamera.is_active ? "Start streaming immediately" : "Create without starting"}
+                  </span>
+                </div>
               </div>
             </div>
             <DialogFooter>

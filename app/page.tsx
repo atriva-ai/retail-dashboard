@@ -1,7 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+<<<<<<< HEAD
 import { AlertCircle, ArrowDown, ArrowUp, Clock, Package, ShoppingCart, Users } from "lucide-react"
+=======
+import { AlertCircle, ArrowDown, ArrowUp, Clock, Users } from "lucide-react"
+>>>>>>> origin/main
 import { ChartWrapper } from "@/components/ui/chart"
 import { DashboardChart } from "@/components/dashboard"
 import { CameraStatusGrid, CameraStatusHeader } from "@/components/cameras"
@@ -22,7 +26,11 @@ export default function Dashboard() {
         </div>
       </div>
 
+<<<<<<< HEAD
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+=======
+      <div className="grid gap-4 md:grid-cols-2">
+>>>>>>> origin/main
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Foot Traffic</CardTitle>
@@ -54,6 +62,7 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
+<<<<<<< HEAD
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -83,6 +92,8 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
+=======
+>>>>>>> origin/main
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">

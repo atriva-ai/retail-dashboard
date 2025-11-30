@@ -1,12 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { ChartTooltip } from "@/components/ui/chart"
-import { useTrafficData } from "@/hooks/use-analytics"
 
-// Fallback data in case API fails
-const fallbackData = [
+// Static chart data - traffic analytics API not implemented yet
+const chartData = [
   { time: "8AM", entrance: 40, productArea: 24, checkout: 10 },
   { time: "9AM", entrance: 65, productArea: 45, checkout: 20 },
   { time: "10AM", entrance: 85, productArea: 62, checkout: 35 },
@@ -24,14 +22,6 @@ const fallbackData = [
 ]
 
 export default function DashboardChart() {
-  const { data, isLoading, error } = useTrafficData()
-  const [chartData, setChartData] = useState(fallbackData)
-
-  useEffect(() => {
-    if (data) {
-      setChartData(data)
-    }
-  }, [data])
 
   return (
     <ResponsiveContainer width="100%" height="100%">
