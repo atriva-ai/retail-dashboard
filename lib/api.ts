@@ -4,6 +4,17 @@
 
 // API base URL - simplified since all calls are client-side
 const getApiBaseUrl = () => {
+  // In browser, detect the current host to work when accessed from network IPs
+  if (typeof window !== 'undefined') {
+    // Use relative URL if NEXT_PUBLIC_API_URL is not set or is localhost
+    const envUrl = process.env.NEXT_PUBLIC_API_URL
+    if (!envUrl || envUrl === 'http://localhost' || envUrl.startsWith('http://localhost')) {
+      // Use relative URL - will automatically use the same host/port as the frontend
+      return ''
+    }
+    return envUrl
+  }
+  // Server-side: use environment variable or default
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost"
 }
 
@@ -84,7 +95,9 @@ export const apiClient = {
    * GET request
    */
   async get<T>(endpoint: string, params?: Record<string, string> | { responseType?: string }): Promise<T> {
-    const url = new URL(`${API_BASE_URL}${endpoint}`)
+    // Handle relative URLs (when API_BASE_URL is empty string)
+    const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const url = new URL(endpoint, baseUrl)
     
     // Handle responseType parameter
     let responseType = 'json'
@@ -123,7 +136,8 @@ export const apiClient = {
    * POST request
    */
   async post<T>(endpoint: string, data?: any): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`
+    const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const url = `${baseUrl}${endpoint}`
 
     const response = await fetchWithTimeout(url, {
       method: "POST",
@@ -139,7 +153,8 @@ export const apiClient = {
    * PUT request
    */
   async put<T>(endpoint: string, data?: any): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`
+    const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const url = `${baseUrl}${endpoint}`
 
     const response = await fetchWithTimeout(url, {
       method: "PUT",
@@ -155,7 +170,8 @@ export const apiClient = {
    * DELETE request
    */
   async delete<T>(endpoint: string): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`
+    const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const url = `${baseUrl}${endpoint}`
 
     const response = await fetchWithTimeout(url, {
       method: "DELETE",

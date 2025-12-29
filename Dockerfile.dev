@@ -1,0 +1,22 @@
+# Development Dockerfile for Next.js
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies first (this layer will be cached)
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install dependencies
+RUN npm install --legacy-peer-deps
+
+# The source code will be mounted as a volume in docker-compose
+# So we don't need to COPY it here
+
+# Expose port
+EXPOSE 3000
+
+# Default command (can be overridden in docker-compose)
+CMD ["npm", "run", "dev"]
+
