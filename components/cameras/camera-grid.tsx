@@ -3,10 +3,12 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api"
 import { Camera, CameraDisplay } from "@/types"
-import { Wifi, WifiOff, Activity, Bell, BellOff, Eye, EyeOff } from "lucide-react"
+import { Wifi, WifiOff, Activity, Bell, BellOff, Eye, EyeOff, Brain } from "lucide-react"
 
 // Utility function to extract IP address from RTSP URL
 const extractIpFromRtsp = (rtspUrl: string): string => {
@@ -38,6 +40,7 @@ export default function CameraGrid() {
   const [cameras, setCameras] = useState<CameraDisplay[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const [useAiAnnotated, setUseAiAnnotated] = useState<Record<number, boolean>>({})
 
   // Fetch cameras with all related data (metadata only, no snapshots)
   const fetchCamerasWithData = useCallback(async () => {
@@ -134,9 +137,10 @@ export default function CameraGrid() {
   }, [])
 
   // Fetch snapshot for a specific camera
-  const fetchSnapshot = useCallback(async (cameraId: number) => {
+  const fetchSnapshot = useCallback(async (cameraId: number, useAnnotated: boolean = false) => {
     try {
-      const response = await apiClient.get<Blob>(`/api/v1/cameras/${cameraId}/latest-frame/`, { responseType: 'blob' })
+      const url = `/api/v1/cameras/${cameraId}/latest-frame/?use_ai_annotated=${useAnnotated}`
+      const response = await apiClient.get<Blob>(url, { responseType: 'blob' })
       if (response instanceof Blob && response.size > 0) {
         return URL.createObjectURL(response)
       }
@@ -178,7 +182,8 @@ export default function CameraGrid() {
             if (camera.decoderStatus?.streaming_status !== 'streaming') {
               return { ...camera, snapshotUrl: undefined }
             }
-            const snapshotUrl = await fetchSnapshot(camera.id)
+            const useAnnotated = useAiAnnotated[camera.id] || false
+            const snapshotUrl = await fetchSnapshot(camera.id, useAnnotated)
             return { ...camera, snapshotUrl: snapshotUrl || camera.snapshotUrl }
           })
         )
@@ -202,7 +207,7 @@ export default function CameraGrid() {
       clearTimeout(initialTimeout)
       clearInterval(snapshotInterval)
     }
-  }, [fetchSnapshot])
+  }, [fetchSnapshot, useAiAnnotated])
 
   // Set up status refresh interval (separate from snapshots)
   useEffect(() => {
@@ -247,6 +252,25 @@ export default function CameraGrid() {
           </CardHeader>
           
           <CardContent className="pt-0">
+            {/* AI Annotation Toggle */}
+            {camera.decoderStatus?.streaming_status === 'streaming' && (
+              <div className="flex items-center justify-between mb-2 pb-2 border-b">
+                <div className="flex items-center space-x-2">
+                  <Brain className="h-4 w-4 text-blue-500" />
+                  <Label htmlFor={`ai-toggle-${camera.id}`} className="text-xs text-muted-foreground cursor-pointer">
+                    AI Detection
+                  </Label>
+                </div>
+                <Switch
+                  id={`ai-toggle-${camera.id}`}
+                  checked={useAiAnnotated[camera.id] || false}
+                  onCheckedChange={(checked) => {
+                    setUseAiAnnotated(prev => ({ ...prev, [camera.id]: checked }))
+                  }}
+                />
+              </div>
+            )}
+            
             {/* Snapshot Image */}
             <div className="relative mb-4">
               {camera.snapshotUrl ? (
