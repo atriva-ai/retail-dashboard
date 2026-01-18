@@ -20,11 +20,13 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl()
 
-// Debug log the API base URL
-console.log('🔧 API Base URL:', API_BASE_URL)
-console.log('🔧 Environment:', process.env.NODE_ENV)
-console.log('🔧 Public API URL:', process.env.NEXT_PUBLIC_API_URL)
-console.log('🔧 Is Server Side:', typeof window === 'undefined')
+// Debug log the API base URL (only in client-side context)
+if (typeof window !== 'undefined') {
+  console.log('🔧 API Base URL:', API_BASE_URL)
+  console.log('🔧 Environment:', process.env.NODE_ENV)
+  console.log('🔧 Public API URL:', process.env.NEXT_PUBLIC_API_URL)
+  console.log('🔧 Is Server Side:', typeof window === 'undefined')
+}
 
 // Default request headers
 const defaultHeaders = {
@@ -42,8 +44,11 @@ export async function fetchWithTimeout(
   options: RequestInit = {},
   timeout: number = TIMEOUT,
 ): Promise<Response> {
-  console.log('🌐 Making API request to:', url)
-  console.log('🌐 Request options:', { method: options.method, headers: options.headers })
+  // Only log in client-side context
+  if (typeof window !== 'undefined') {
+    console.log('🌐 Making API request to:', url)
+    console.log('🌐 Request options:', { method: options.method, headers: options.headers })
+  }
   
   const controller = new AbortController()
   const { signal } = controller
@@ -57,20 +62,40 @@ export async function fetchWithTimeout(
     })
 
     clearTimeout(timeoutId)
-    console.log('🌐 Response status:', response.status, response.statusText)
+    
+    // Only log in client-side context
+    if (typeof window !== 'undefined') {
+      console.log('🌐 Response status:', response.status, response.statusText)
+    }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      console.error('API Error Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        url: response.url,
-        data: errorData
-      })
+      let errorData = {}
+      try {
+        const text = await response.text()
+        errorData = text ? JSON.parse(text) : {}
+      } catch {
+        // If parsing fails, use empty object
+        errorData = {}
+      }
+      
+      // Only log errors in client-side context
+      if (typeof window !== 'undefined') {
+        try {
+          console.error('API Error Response:', {
+            status: response.status,
+            statusText: response.statusText,
+            url: (response as any).url || url,
+            data: errorData
+          })
+        } catch (logError) {
+          // Silently fail if logging causes issues
+        }
+      }
       
       // Create a more descriptive error message
-      const errorMessage = errorData.message || 
-                          errorData.error || 
+      const errorMessage = (errorData as any)?.message || 
+                          (errorData as any)?.error || 
+                          (errorData as any)?.detail ||
                           `HTTP ${response.status}: ${response.statusText}`
       
       throw new Error(errorMessage)
@@ -79,7 +104,12 @@ export async function fetchWithTimeout(
     return response
   } catch (error) {
     clearTimeout(timeoutId)
-    console.error('🌐 Fetch error:', error)
+    
+    // Only log errors in client-side context
+    if (typeof window !== 'undefined') {
+      console.error('🌐 Fetch error:', error)
+    }
+    
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("Request timeout")
     }

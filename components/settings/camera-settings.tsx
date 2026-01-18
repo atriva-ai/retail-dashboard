@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
 import { Camera, Edit, Plus, Trash, RefreshCw } from "lucide-react"
 import {
   Dialog,
@@ -32,6 +33,7 @@ interface Camera {
   updated_at: string
   stream_status?: string // legacy field
   frame_count?: number
+  person_detection_enabled?: boolean // AI person detection enabled
 }
 
 interface VideoValidation {
@@ -496,6 +498,7 @@ export default function CameraSettings() {
               <TableHead>RTSP URL</TableHead>
               <TableHead>Streaming Controls & Status</TableHead>
               <TableHead>Video Info</TableHead>
+              <TableHead>AI Detection</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -565,6 +568,41 @@ export default function CameraSettings() {
                     <span className="text-sm text-muted-foreground">No video info</span>
                   )}
                 </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      variant={camera.person_detection_enabled !== false ? "default" : "secondary"}
+                      className={
+                        camera.person_detection_enabled !== false 
+                          ? "bg-green-500/10 text-green-500 border-green-500/20" 
+                          : "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                      }
+                    >
+                      {camera.person_detection_enabled !== false ? "Enabled" : "Disabled"}
+                    </Badge>
+                    <Switch
+                      checked={camera.person_detection_enabled !== false}
+                      onCheckedChange={async (checked) => {
+                        try {
+                          await apiClient.put(`/api/v1/cameras/${camera.id}`, {
+                            person_detection_enabled: checked
+                          })
+                          toast({
+                            title: "Success",
+                            description: `AI Detection ${checked ? 'enabled' : 'disabled'}`,
+                          })
+                          fetchCameras()
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: "Failed to update AI detection status",
+                            variant: "destructive",
+                          })
+                        }
+                      }}
+                    />
+                  </div>
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <Button
@@ -630,6 +668,17 @@ export default function CameraSettings() {
                                 id="edit-active"
                                 checked={editCamera.is_active}
                                 onCheckedChange={(checked) => setEditCamera({ ...editCamera, is_active: checked })}
+                                className="col-span-3"
+                              />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="edit-ai-detection" className="text-right">
+                                AI Detection
+                              </Label>
+                              <Switch
+                                id="edit-ai-detection"
+                                checked={editCamera.person_detection_enabled !== false}
+                                onCheckedChange={(checked) => setEditCamera({ ...editCamera, person_detection_enabled: checked })}
                                 className="col-span-3"
                               />
                             </div>

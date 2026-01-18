@@ -11,6 +11,7 @@ export interface Camera {
   updated_at: string
   zone_ids: number[]
   stream_status?: string // e.g., 'active', 'stopped', 'starting', 'error' (legacy field)
+  person_detection_enabled?: boolean // AI person detection enabled
 }
 
 // Frontend-specific interface for display
@@ -22,6 +23,7 @@ export interface CameraDisplay {
   status: "online" | "offline" | "warning"
   analyticsEnabled: boolean
   alertEnabled: boolean
+  aiDetectionEnabled?: boolean // AI person detection enabled
   video_info?: any
   stream_status?: string // e.g., 'active', 'stopped', 'starting', 'error'
   snapshotUrl?: string

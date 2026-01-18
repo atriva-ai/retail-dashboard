@@ -86,6 +86,7 @@ export default function CameraGrid() {
               status,
               analyticsEnabled: Array.isArray(analytics) && analytics.length > 0,
               alertEnabled: Array.isArray(alertEngines) && alertEngines.length > 0,
+              aiDetectionEnabled: camera.person_detection_enabled ?? true, // Default to true
               video_info: camera.video_info,
               decoderStatus: {
                 is_active: decoderStatus?.is_active || false,
@@ -105,6 +106,7 @@ export default function CameraGrid() {
               status: "offline" as const,
               analyticsEnabled: false,
               alertEnabled: false,
+              aiDetectionEnabled: camera.person_detection_enabled ?? true, // Default to true
               video_info: camera.video_info,
               decoderStatus: {
                 is_active: false,
@@ -252,13 +254,33 @@ export default function CameraGrid() {
           </CardHeader>
           
           <CardContent className="pt-0">
-            {/* AI Annotation Toggle */}
-            {camera.decoderStatus?.streaming_status === 'streaming' && (
+            {/* AI Detection Status */}
+            <div className="flex items-center justify-between mb-2 pb-2 border-b">
+              <div className="flex items-center space-x-2">
+                <Brain className="h-4 w-4 text-blue-500" />
+                <Label className="text-xs text-muted-foreground">
+                  AI Detection
+                </Label>
+              </div>
+              <Badge 
+                variant={camera.aiDetectionEnabled ? "default" : "secondary"}
+                className={cn(
+                  "text-xs",
+                  camera.aiDetectionEnabled && "bg-green-500/10 text-green-500 border-green-500/20",
+                  !camera.aiDetectionEnabled && "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                )}
+              >
+                {camera.aiDetectionEnabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            
+            {/* AI Annotation Toggle (for viewing annotated frames) */}
+            {camera.decoderStatus?.streaming_status === 'streaming' && camera.aiDetectionEnabled && (
               <div className="flex items-center justify-between mb-2 pb-2 border-b">
                 <div className="flex items-center space-x-2">
-                  <Brain className="h-4 w-4 text-blue-500" />
+                  <Eye className="h-4 w-4 text-purple-500" />
                   <Label htmlFor={`ai-toggle-${camera.id}`} className="text-xs text-muted-foreground cursor-pointer">
-                    AI Detection
+                    Show Annotations
                   </Label>
                 </div>
                 <Switch
