@@ -84,7 +84,11 @@ export default function Sidebar() {
       try {
         const response = await apiClient.get<any[]>("/api/v1/cameras/")
         setCameraCount(response?.length ?? 0)
-      } catch {
+      } catch (error) {
+        // Only log error if it's not a network/timeout error (to reduce console noise)
+        if (error instanceof Error && !error.message.includes('timeout') && !error.message.includes('Failed to fetch')) {
+          console.warn('Failed to fetch camera count:', error.message)
+        }
         setCameraCount(null)
       }
     }

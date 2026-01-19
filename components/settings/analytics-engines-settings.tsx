@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import type React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,7 +21,10 @@ import {
   UserCheck, 
   TrendingUp,
   MapPin,
-  Activity
+  Activity,
+  ArrowRight,
+  ArrowLeft,
+  ArrowUpDown
 } from "lucide-react"
 import {
   Dialog,
@@ -69,68 +73,33 @@ interface ZoneCoordinate {
   points: Array<{ x: number; y: number }>
 }
 
-// Analytics engine types - simplified to 7 types as requested
-const ANALYTICS_ENGINE_TYPES = [
-  {
-    value: "people_counting",
-    label: "People Counting",
-    description: "Count the number of people entering and exiting areas (whole camera)",
-    icon: Users,
-    requiresZone: false,
-    requiresLine: false
-  },
-  {
-    value: "dwell_time",
-    label: "Dwell Time Analysis",
-    description: "Analyze how long people spend in specific areas (whole camera)",
-    icon: Clock,
-    requiresZone: false,
-    requiresLine: false
-  },
-  {
-    value: "demographic",
-    label: "Demographic Analytics",
-    description: "Analyze demographic information of visitors (whole camera)",
-    icon: UserCheck,
-    requiresZone: false,
-    requiresLine: false
-  },
-  {
-    value: "people_counting_by_zone",
-    label: "People Counting by Zone",
-    description: "Count people within a defined zone area",
-    icon: MapPin,
-    requiresZone: true,
-    requiresLine: false
-  },
-  {
-    value: "dwell_time_by_zone",
-    label: "Dwell Time Analysis by Zone",
-    description: "Track dwell time within a defined zone",
-    icon: Clock,
-    requiresZone: true,
-    requiresLine: false
-  },
-  {
-    value: "line_cross_count",
-    label: "Line Cross Count",
-    description: "Count people crossing a virtual line",
-    icon: TrendingUp,
-    requiresZone: false,
-    requiresLine: true
-  },
-  {
-    value: "demographic_on_line_crossing",
-    label: "Demographic Analysis on Line Crossing",
-    description: "Analyze demographics of people crossing a line",
-    icon: UserCheck,
-    requiresZone: false,
-    requiresLine: true
+interface AnalyticsTypeConfig {
+  value: string
+  label: string
+  description: string
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  requiresZone: boolean
+  requiresLine: boolean
+}
+
+// Map analytics type to icon component
+const getIconForType = (type: string): React.ComponentType<React.SVGProps<SVGSVGElement>> => {
+  const iconMap: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+    "people_counting": Users,
+    "dwell_time": Clock,
+    "demographic": UserCheck,
+    "people_counting_by_zone": MapPin,
+    "dwell_time_by_zone": Clock,
+    "line_cross_count": TrendingUp,
+    "demographic_on_line_crossing": UserCheck,
+    "entrance": Activity,
   }
-]
+  return iconMap[type] || Brain
+}
 
 export default function AnalyticsEnginesSettings() {
   const [analyticsEngines, setAnalyticsEngines] = useState<AnalyticsEngine[]>([])
+  const [analyticsTypes, setAnalyticsTypes] = useState<AnalyticsTypeConfig[]>([])
   const [cameras, setCameras] = useState<Camera[]>([])
   const [loading, setLoading] = useState(true)
   const [editEngine, setEditEngine] = useState<AnalyticsEngine | null>(null)
@@ -146,9 +115,11 @@ export default function AnalyticsEnginesSettings() {
   const [isZoneDrawingOpen, setIsZoneDrawingOpen] = useState(false)
   const [selectedCameraForDrawing, setSelectedCameraForDrawing] = useState<Camera | null>(null)
   const [lineCoordinates, setLineCoordinates] = useState<LineCoordinate | null>(null)
+  const [entranceSidePoint, setEntranceSidePoint] = useState<{ x: number; y: number } | null>(null)
   const [zoneCoordinates, setZoneCoordinates] = useState<ZoneCoordinate | null>(null)
   const [selectedEngineType, setSelectedEngineType] = useState<string | undefined>(undefined)
   const [selectedCameraForAssignment, setSelectedCameraForAssignment] = useState<number | null>(null)
+  const [entranceDirection, setEntranceDirection] = useState<'in' | 'out' | 'both'>('both')
   const { toast } = useToast()
 
   const fetchCameras = async () => {
@@ -175,9 +146,46 @@ export default function AnalyticsEnginesSettings() {
     }
   }
 
+  const fetchAnalyticsTypes = async () => {
+    try {
+      console.log('🔍 Fetching analytics types from backend...')
+      const response = await apiClient.get<Record<string, {
+        name: string
+        type: string
+        description: string
+        requires_zone: boolean
+        requires_line: boolean
+      }>>('/api/v1/analytics/types')
+      
+      // Transform backend response to frontend format
+      const types: AnalyticsTypeConfig[] = Object.values(response || {}).map((config) => ({
+        value: config.type,
+        label: config.name,
+        description: config.description,
+        icon: getIconForType(config.type),
+        requiresZone: config.requires_zone || false,
+        requiresLine: config.requires_line || false,
+      }))
+      
+      console.log('🔍 Analytics types response:', types)
+      setAnalyticsTypes(types)
+    } catch (error) {
+      console.error('Error fetching analytics types:', error)
+      // Fallback to empty array if API fails
+      setAnalyticsTypes([])
+      toast({
+        title: "Warning",
+        description: "Failed to load analytics types from backend",
+        variant: "destructive",
+      })
+    }
+  }
+
   useEffect(() => {
     fetchCameras()
     fetchAnalyticsEngines()
+    fetchAnalyticsTypes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleAddEngine = async () => {
@@ -185,7 +193,7 @@ export default function AnalyticsEnginesSettings() {
       try {
         // Prepare config based on engine type
         let config = {}
-        const engineType = ANALYTICS_ENGINE_TYPES.find(t => t.value === newEngine.type)
+        const engineType = analyticsTypes.find(t => t.value === newEngine.type)
         
         if (engineType?.requiresLine && lineCoordinates) {
           config = { ...config, line: lineCoordinates }
@@ -212,6 +220,29 @@ export default function AnalyticsEnginesSettings() {
             console.error('Failed to assign analytics to camera:', error)
           }
 
+          // If this is entrance analytics, enable it via the entrance/exit API
+          if (newEngine.type === 'entrance' && lineCoordinates) {
+            try {
+              const configPayload: any = {
+                enabled: true,
+                line: lineCoordinates,
+                direction: entranceDirection
+              }
+              // Add entrance side point if provided
+              if (entranceSidePoint) {
+                configPayload.entrance_side = entranceSidePoint
+              }
+              await apiClient.put(`/api/v1/entrance-exit/config/${selectedCameraForAssignment}`, configPayload)
+            } catch (error) {
+              console.error('Failed to enable entrance/exit analytics:', error)
+              toast({
+                title: "Warning",
+                description: "Analytics engine created but entrance/exit tracking may not be enabled",
+                variant: "default",
+              })
+            }
+          }
+
           // Add to local state with API response
           setAnalyticsEngines(prev => [...prev, response])
         }
@@ -232,6 +263,7 @@ export default function AnalyticsEnginesSettings() {
         setIsAddDialogOpen(false)
         setLineCoordinates(null)
         setZoneCoordinates(null)
+        setEntranceDirection('both')
         setSelectedEngineType(undefined)
       } catch (error) {
         console.error('Failed to create analytics engine:', error)
@@ -348,7 +380,7 @@ export default function AnalyticsEnginesSettings() {
     setSelectedEngineType(type)
     setNewEngine({ ...newEngine, type })
     
-    const engineType = ANALYTICS_ENGINE_TYPES.find(t => t.value === type)
+    const engineType = analyticsTypes.find(t => t.value === type)
     if (engineType?.requiresLine) {
       if (!selectedCameraForAssignment) {
         toast({
@@ -374,8 +406,11 @@ export default function AnalyticsEnginesSettings() {
     }
   }
 
-  const handleLineDrawingComplete = (coordinates: LineCoordinate) => {
+  const handleLineDrawingComplete = (coordinates: LineCoordinate, entranceSide?: { x: number; y: number }) => {
     setLineCoordinates(coordinates)
+    setEntranceSidePoint(entranceSide || null)
+    // Reset direction to 'both' when a new line is drawn
+    setEntranceDirection('both')
     setIsLineDrawingOpen(false)
   }
 
@@ -392,7 +427,7 @@ export default function AnalyticsEnginesSettings() {
   }
 
   const getEngineIcon = (type: string) => {
-    const engineType = ANALYTICS_ENGINE_TYPES.find(t => t.value === type)
+    const engineType = analyticsTypes.find(t => t.value === type)
     if (engineType) {
       const IconComponent = engineType.icon
       return <IconComponent className="h-4 w-4" />
@@ -401,12 +436,12 @@ export default function AnalyticsEnginesSettings() {
   }
 
   const getEngineTypeLabel = (type: string) => {
-    const engineType = ANALYTICS_ENGINE_TYPES.find(t => t.value === type)
+    const engineType = analyticsTypes.find(t => t.value === type)
     return engineType ? engineType.label : type
   }
 
   const getEngineTypeDescription = (type: string) => {
-    const engineType = ANALYTICS_ENGINE_TYPES.find(t => t.value === type)
+    const engineType = analyticsTypes.find(t => t.value === type)
     return engineType ? engineType.description : ""
   }
 
@@ -485,20 +520,23 @@ export default function AnalyticsEnginesSettings() {
                 <Select
                   value={newEngine.type}
                   onValueChange={handleEngineTypeChange}
-                  disabled={ANALYTICS_ENGINE_TYPES.length === 0}
+                  disabled={analyticsTypes.length === 0}
                 >
                   <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select analytics engine type (required)" />
+                    <SelectValue placeholder={analyticsTypes.length === 0 ? "Loading types..." : "Select analytics engine type (required)"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {ANALYTICS_ENGINE_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        <div className="flex items-center space-x-2">
-                          {getEngineIcon(type.value)}
-                          <span>{type.label}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {analyticsTypes.map((type) => {
+                      const IconComponent = type.icon
+                      return (
+                        <SelectItem key={type.value} value={type.value}>
+                          <div className="flex items-center space-x-2">
+                            <IconComponent className="h-4 w-4" />
+                            <span>{type.label}</span>
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -507,12 +545,12 @@ export default function AnalyticsEnginesSettings() {
                   <p className="text-sm text-muted-foreground">
                     {getEngineTypeDescription(selectedEngineType)}
                   </p>
-                  {ANALYTICS_ENGINE_TYPES.find(t => t.value === selectedEngineType)?.requiresLine && (
+                  {analyticsTypes.find(t => t.value === selectedEngineType)?.requiresLine && (
                     <p className="text-sm text-blue-600 mt-1">
                       ⚠️ This analytics type requires drawing a virtual line
                     </p>
                   )}
-                  {ANALYTICS_ENGINE_TYPES.find(t => t.value === selectedEngineType)?.requiresZone && (
+                  {analyticsTypes.find(t => t.value === selectedEngineType)?.requiresZone && (
                     <p className="text-sm text-green-600 mt-1">
                       ⚠️ This analytics type requires drawing a zone
                     </p>
@@ -520,10 +558,61 @@ export default function AnalyticsEnginesSettings() {
                 </div>
               )}
               {lineCoordinates && (
-                <div className="col-span-4 p-3 bg-blue-50 rounded-md">
-                  <p className="text-sm text-blue-700">
-                    ✅ Line configured: ({lineCoordinates.x1.toFixed(1)}, {lineCoordinates.y1.toFixed(1)}) to ({lineCoordinates.x2.toFixed(1)}, {lineCoordinates.y2.toFixed(1)})
-                  </p>
+                <div className="col-span-4 space-y-3">
+                  <div className="p-3 bg-blue-50 rounded-md">
+                    <p className="text-sm text-blue-700">
+                      ✅ Line configured: ({lineCoordinates.x1.toFixed(1)}, {lineCoordinates.y1.toFixed(1)}) to ({lineCoordinates.x2.toFixed(1)}, {lineCoordinates.y2.toFixed(1)})
+                    </p>
+                    {entranceSidePoint && (
+                      <p className="text-sm text-green-700 mt-1">
+                        ✅ Entrance side marked at ({entranceSidePoint.x.toFixed(1)}, {entranceSidePoint.y.toFixed(1)})
+                      </p>
+                    )}
+                  </div>
+                  {selectedEngineType === 'entrance' && (
+                    <div className="p-3 bg-amber-50 rounded-md border border-amber-200">
+                      <Label className="text-sm font-medium text-amber-900 mb-2 block">
+                        Select Direction:
+                      </Label>
+                      <div className="flex gap-3">
+                        <Button
+                          type="button"
+                          variant={entranceDirection === 'in' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setEntranceDirection('in')}
+                          className="flex items-center gap-2"
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                          Enter Only
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={entranceDirection === 'out' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setEntranceDirection('out')}
+                          className="flex items-center gap-2"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          Exit Only
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={entranceDirection === 'both' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setEntranceDirection('both')}
+                          className="flex items-center gap-2"
+                        >
+                          <ArrowUpDown className="h-4 w-4" />
+                          Both Directions
+                        </Button>
+                      </div>
+                      <p className="text-xs text-amber-700 mt-2">
+                        {entranceDirection === 'in' && 'Count only people entering (crossing from right to left relative to line direction)'}
+                        {entranceDirection === 'out' && 'Count only people exiting (crossing from left to right relative to line direction)'}
+                        {entranceDirection === 'both' && 'Count people entering and exiting in both directions'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               {zoneCoordinates && (
@@ -685,6 +774,7 @@ export default function AnalyticsEnginesSettings() {
               cameraId={selectedCameraForAssignment}
               onLineComplete={handleLineDrawingComplete}
               onCancel={() => setIsLineDrawingOpen(false)}
+              requireEntranceSide={selectedEngineType === 'entrance'}
             />
           )}
         </DialogContent>

@@ -15,15 +15,19 @@ interface LineCoordinate {
 
 interface LineDrawingCanvasProps {
   cameraId: number
-  onLineComplete: (coordinates: LineCoordinate) => void
+  onLineComplete: (coordinates: LineCoordinate, entranceSidePoint?: { x: number; y: number }) => void
   onCancel: () => void
+  requireEntranceSide?: boolean // If true, user must mark entrance side after drawing line
 }
 
-export default function LineDrawingCanvas({ cameraId, onLineComplete, onCancel }: LineDrawingCanvasProps) {
+export default function LineDrawingCanvas({ cameraId, onLineComplete, onCancel, requireEntranceSide = false }: LineDrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null)
   const [currentLine, setCurrentLine] = useState<LineCoordinate | null>(null)
+  const [entranceSidePoint, setEntranceSidePoint] = useState<{ x: number; y: number } | null>(null)
+  const [isMarkingEntrance, setIsMarkingEntrance] = useState(false)
+  const [lineConfirmed, setLineConfirmed] = useState(false)
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -114,11 +118,51 @@ export default function LineDrawingCanvas({ cameraId, onLineComplete, onCancel }
           ctx.moveTo(currentLine.x1, currentLine.y1)
           ctx.lineTo(currentLine.x2, currentLine.y2)
           ctx.stroke()
+          
+          // Draw arrow indicator to show line direction
+          const dx = currentLine.x2 - currentLine.x1
+          const dy = currentLine.y2 - currentLine.y1
+          const length = Math.sqrt(dx * dx + dy * dy)
+          const angle = Math.atan2(dy, dx)
+          
+          // Arrow head at the end of the line
+          const arrowLength = 15
+          const arrowWidth = 8
+          const arrowX = currentLine.x2
+          const arrowY = currentLine.y2
+          
+          ctx.save()
+          ctx.translate(arrowX, arrowY)
+          ctx.rotate(angle)
+          ctx.beginPath()
+          ctx.moveTo(0, 0)
+          ctx.lineTo(-arrowLength, -arrowWidth / 2)
+          ctx.lineTo(-arrowLength, arrowWidth / 2)
+          ctx.closePath()
+          ctx.fillStyle = '#ff0000'
+          ctx.fill()
+          ctx.restore()
+        }
+        
+        // Draw entrance side marker if set
+        if (entranceSidePoint) {
+          ctx.fillStyle = '#00ff00'
+          ctx.beginPath()
+          ctx.arc(entranceSidePoint.x, entranceSidePoint.y, 10, 0, 2 * Math.PI)
+          ctx.fill()
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 2
+          ctx.stroke()
+          
+          // Draw "ENTRANCE" label
+          ctx.fillStyle = '#00ff00'
+          ctx.font = 'bold 14px Arial'
+          ctx.fillText('ENTRANCE', entranceSidePoint.x + 15, entranceSidePoint.y - 10)
         }
       }
       img.src = snapshotUrl
     }
-  }, [snapshotUrl, currentLine])
+  }, [snapshotUrl, currentLine, entranceSidePoint])
 
   useEffect(() => {
     drawCanvas()
@@ -136,6 +180,14 @@ export default function LineDrawingCanvas({ cameraId, onLineComplete, onCancel }
     const x = (e.clientX - rect.left) * scaleX
     const y = (e.clientY - rect.top) * scaleY
 
+    // If marking entrance side, set the point and exit marking mode
+    if (isMarkingEntrance && lineConfirmed) {
+      setEntranceSidePoint({ x, y })
+      setIsMarkingEntrance(false)
+      return
+    }
+
+    // Otherwise, draw line
     setStartPoint({ x, y })
     setIsDrawing(true)
   }
@@ -171,14 +223,44 @@ export default function LineDrawingCanvas({ cameraId, onLineComplete, onCancel }
 
   const handleConfirmLine = () => {
     if (currentLine) {
-      onLineComplete(currentLine)
+      if (requireEntranceSide && !entranceSidePoint) {
+        // If entrance side is required but not set, enter marking mode
+        setIsMarkingEntrance(true)
+        setLineConfirmed(true)
+        // Update cursor
+        const canvas = canvasRef.current
+        if (canvas) {
+          canvas.style.cursor = 'crosshair'
+        }
+      } else {
+        // Line is complete, call callback with line and entrance side point
+        onLineComplete(currentLine, entranceSidePoint || undefined)
+      }
+    }
+  }
+
+  const handleMarkEntranceSide = () => {
+    if (currentLine && !lineConfirmed) {
+      setLineConfirmed(true)
+    }
+    setIsMarkingEntrance(true)
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.style.cursor = 'crosshair'
     }
   }
 
   const handleReset = () => {
     setCurrentLine(null)
     setStartPoint(null)
+    setEntranceSidePoint(null)
     setIsDrawing(false)
+    setIsMarkingEntrance(false)
+    setLineConfirmed(false)
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.style.cursor = 'crosshair'
+    }
   }
 
   const handleRefresh = () => {
@@ -243,11 +325,37 @@ export default function LineDrawingCanvas({ cameraId, onLineComplete, onCancel }
                 Line coordinates: ({currentLine.x1.toFixed(1)}, {currentLine.y1.toFixed(1)}) to ({currentLine.x2.toFixed(1)}, {currentLine.y2.toFixed(1)})
               </div>
             )}
+            
+            {isMarkingEntrance && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm text-green-800 font-medium">
+                  🎯 Click on the side of the line where people ENTER (the entrance side)
+                </p>
+              </div>
+            )}
+            
+            {entranceSidePoint && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm text-green-800">
+                  ✅ Entrance side marked at ({entranceSidePoint.x.toFixed(1)}, {entranceSidePoint.y.toFixed(1)})
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-2">
-              <Button onClick={handleConfirmLine} disabled={!currentLine}>
-                Confirm Line
-              </Button>
+              {!lineConfirmed ? (
+                <Button onClick={handleConfirmLine} disabled={!currentLine}>
+                  Confirm Line
+                </Button>
+              ) : requireEntranceSide && !entranceSidePoint ? (
+                <Button onClick={handleMarkEntranceSide} variant="default">
+                  Mark Entrance Side
+                </Button>
+              ) : (
+                <Button onClick={() => onLineComplete(currentLine!, entranceSidePoint || undefined)} disabled={!currentLine || (requireEntranceSide && !entranceSidePoint)}>
+                  Complete
+                </Button>
+              )}
               <Button onClick={handleReset} variant="outline" disabled={!currentLine}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Reset

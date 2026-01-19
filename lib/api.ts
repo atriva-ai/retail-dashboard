@@ -70,9 +70,10 @@ export async function fetchWithTimeout(
 
     if (!response.ok) {
       let errorData = {}
+      let errorText = ''
       try {
-        const text = await response.text()
-        errorData = text ? JSON.parse(text) : {}
+        errorText = await response.text()
+        errorData = errorText ? JSON.parse(errorText) : {}
       } catch {
         // If parsing fails, use empty object
         errorData = {}
@@ -81,12 +82,14 @@ export async function fetchWithTimeout(
       // Only log errors in client-side context
       if (typeof window !== 'undefined') {
         try {
-          console.error('API Error Response:', {
+          const errorInfo = {
             status: response.status,
             statusText: response.statusText,
             url: (response as any).url || url,
-            data: errorData
-          })
+            data: errorData,
+            rawText: errorText || '(empty response)'
+          }
+          console.error('API Error Response:', errorInfo)
         } catch (logError) {
           // Silently fail if logging causes issues
         }
@@ -96,7 +99,7 @@ export async function fetchWithTimeout(
       const errorMessage = (errorData as any)?.message || 
                           (errorData as any)?.error || 
                           (errorData as any)?.detail ||
-                          `HTTP ${response.status}: ${response.statusText}`
+                          (errorText && errorText.trim() ? errorText : `HTTP ${response.status}: ${response.statusText}`)
       
       throw new Error(errorMessage)
     }
@@ -209,12 +212,32 @@ export const apiClient = {
       credentials: "include",
     })
 
-    // Handle 204 No Content responses
+    // Handle 204 No Content responses (common for DELETE operations)
     if (response.status === 204) {
       return {} as T
     }
+    
+    // Handle 200 OK with potentially empty body
+    if (response.status === 200) {
+      const contentType = response.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          const text = await response.text()
+          return text ? JSON.parse(text) : ({} as T)
+        } catch {
+          return {} as T
+        }
+      }
+      return {} as T
+    }
 
-    return response.json()
+    // For other status codes, try to parse JSON
+    try {
+      return await response.json()
+    } catch {
+      // If JSON parsing fails, return empty object
+      return {} as T
+    }
   },
 }
 
