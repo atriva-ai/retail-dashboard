@@ -18,6 +18,7 @@ import { ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { Camera } from "@/types"
 import { cn } from "@/lib/utils"
+import EntranceExitCounts from "@/components/person-activity/entrance-exit-counts"
 
 interface ActivityRecord {
   sessionId: string
@@ -248,6 +249,9 @@ export default function PersonActivityPage() {
           Real-time and historical insights from in-store cameras
         </p>
       </div>
+
+      {/* Entrance/Exit Counts */}
+      <EntranceExitCounts />
 
       {/* Filter Bar */}
       <Card>
