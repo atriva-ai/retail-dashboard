@@ -6,26 +6,54 @@
 const getApiBaseUrl = () => {
   // In browser, detect the current host to work when accessed from network IPs
   if (typeof window !== 'undefined') {
-    // Use relative URL if NEXT_PUBLIC_API_URL is not set or is localhost
     const envUrl = process.env.NEXT_PUBLIC_API_URL
-    if (!envUrl || envUrl === 'http://localhost' || envUrl.startsWith('http://localhost')) {
-      // Use relative URL - will automatically use the same host/port as the frontend
-      return ''
+    
+    // If explicitly set to a full URL (not just 'http://localhost'), use it
+    if (envUrl && envUrl !== 'http://localhost' && envUrl.includes('://')) {
+      return envUrl
     }
-    return envUrl
+    
+    // Get current host and protocol
+    const currentHost = window.location.hostname
+    const currentProtocol = window.location.protocol
+    const currentPort = window.location.port
+    
+    // Always use the current host for API calls - this handles:
+    // - localhost:3000 -> localhost:8000
+    // - 192.168.9.185:3000 -> 192.168.9.185:8000
+    // - Any network IP -> same IP with port 8000
+    
+    // In development, if running directly (not through nginx), use backend port 8000
+    // Check if we're accessing via nginx (port 80/443) or directly (port 3000)
+    if (currentPort === '3000' || currentPort === '' || currentPort === '80' || currentPort === '443') {
+      // If port is 80/443, we're likely going through nginx - use relative URL
+      if (currentPort === '80' || currentPort === '443' || currentPort === '') {
+        return ''
+      }
+      // Running directly in dev mode - use same host but backend port 8000
+      // This handles both localhost and network IPs (e.g., 192.168.9.185)
+      return `${currentProtocol}//${currentHost}:8000`
+    }
+    
+    // Running through nginx or production - use relative URL (nginx will proxy /api to backend)
+    return ''
   }
-  // Server-side: use environment variable or default
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost"
+  // Server-side: use environment variable or default to backend port
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 }
 
 const API_BASE_URL = getApiBaseUrl()
 
 // Debug log the API base URL (only in client-side context)
 if (typeof window !== 'undefined') {
-  console.log('🔧 API Base URL:', API_BASE_URL)
-  console.log('🔧 Environment:', process.env.NODE_ENV)
-  console.log('🔧 Public API URL:', process.env.NEXT_PUBLIC_API_URL)
-  console.log('🔧 Is Server Side:', typeof window === 'undefined')
+  console.log('🔧 API Configuration:', {
+    apiBaseUrl: API_BASE_URL,
+    currentHost: window.location.hostname,
+    currentPort: window.location.port,
+    currentProtocol: window.location.protocol,
+    envApiUrl: process.env.NEXT_PUBLIC_API_URL,
+    nodeEnv: process.env.NODE_ENV
+  })
 }
 
 // Default request headers
@@ -69,36 +97,81 @@ export async function fetchWithTimeout(
     }
 
     if (!response.ok) {
-      let errorData = {}
+      let errorData: any = {}
       let errorText = ''
       try {
         errorText = await response.text()
-        errorData = errorText ? JSON.parse(errorText) : {}
-      } catch {
-        // If parsing fails, use empty object
-        errorData = {}
+        if (errorText && errorText.trim()) {
+          try {
+            errorData = JSON.parse(errorText)
+          } catch {
+            // If JSON parsing fails, use the raw text as error data
+            errorData = { raw: errorText }
+          }
+        }
+      } catch (textError) {
+        // If reading text fails, errorData remains empty
+        errorText = ''
       }
       
       // Only log errors in client-side context
       if (typeof window !== 'undefined') {
         try {
-          const errorInfo = {
-            status: response.status,
-            statusText: response.statusText,
-            url: (response as any).url || url,
-            data: errorData,
-            rawText: errorText || '(empty response)'
+          // Safely serialize error info to avoid circular references or non-serializable values
+          const errorInfo: Record<string, any> = {}
+          
+          if (response && typeof response.status === 'number') {
+            errorInfo.status = response.status
           }
+          if (response && typeof response.statusText === 'string') {
+            errorInfo.statusText = response.statusText
+          }
+          if (typeof url === 'string') {
+            errorInfo.url = url
+          }
+          if (options && typeof options.method === 'string') {
+            errorInfo.method = options.method
+          } else {
+            errorInfo.method = 'GET'
+          }
+          if (errorData && typeof errorData === 'object') {
+            try {
+              errorInfo.hasErrorData = Object.keys(errorData).length > 0
+              // Only include errorData if it's serializable
+              try {
+                JSON.stringify(errorData)
+                errorInfo.errorData = errorData
+              } catch {
+                errorInfo.errorData = '[non-serializable]'
+              }
+            } catch {
+              errorInfo.hasErrorData = false
+            }
+          }
+          if (typeof errorText === 'string') {
+            errorInfo.rawText = errorText || '(empty response body)'
+          } else {
+            errorInfo.rawText = '(empty response body)'
+          }
+          
           console.error('API Error Response:', errorInfo)
         } catch (logError) {
-          // Silently fail if logging causes issues
+          // If logging fails, at least log the basic info using separate console.error calls
+          try {
+            console.error('API Error - Status:', response?.status)
+            console.error('API Error - StatusText:', response?.statusText)
+            console.error('API Error - URL:', url)
+          } catch {
+            // Last resort - just log a simple message
+            console.error('API Error occurred but could not log details')
+          }
         }
       }
       
       // Create a more descriptive error message
-      const errorMessage = (errorData as any)?.message || 
-                          (errorData as any)?.error || 
-                          (errorData as any)?.detail ||
+      const errorMessage = errorData?.message || 
+                          errorData?.error || 
+                          errorData?.detail ||
                           (errorText && errorText.trim() ? errorText : `HTTP ${response.status}: ${response.statusText}`)
       
       throw new Error(errorMessage)
