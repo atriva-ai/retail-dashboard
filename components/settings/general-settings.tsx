@@ -154,6 +154,55 @@ export default function GeneralSettings() {
               }
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Inference Settings</CardTitle>
+          <CardDescription>Configure AI person detection settings</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="person-detection-default" className="font-normal">
+                Person Detection Enabled by Default
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Enable person detection by default for new cameras
+              </p>
+            </div>
+            <Switch
+              id="person-detection-default"
+              checked={settings.person_detection_enabled_by_default ?? true}
+              onCheckedChange={(checked: boolean) =>
+                updateSettings({ person_detection_enabled_by_default: checked })
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ai-inference-fps">AI Inference FPS</Label>
+            <Select
+              value={String(settings.ai_inference_fps ?? 5)}
+              onValueChange={(value: string) => 
+                updateSettings({ ai_inference_fps: parseFloat(value) })}
+            >
+              <SelectTrigger id="ai-inference-fps">
+                <SelectValue placeholder="Select FPS" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 FPS</SelectItem>
+                <SelectItem value="2">2 FPS</SelectItem>
+                <SelectItem value="5">5 FPS (Default)</SelectItem>
+                <SelectItem value="10">10 FPS</SelectItem>
+                <SelectItem value="15">15 FPS</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Target frames per second for AI person detection inference. Higher FPS provides more frequent detection but uses more resources.
+            </p>
+          </div>
 
           <div className="flex justify-end">
             <Button 

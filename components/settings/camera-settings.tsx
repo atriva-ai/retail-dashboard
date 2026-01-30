@@ -213,7 +213,16 @@ export default function CameraSettings() {
   const handleUpdateCamera = async () => {
     if (editCamera) {
       try {
-        await apiClient.put(`/api/v1/cameras/${editCamera.id}`, editCamera)
+        // Ensure all fields are explicitly included in the update
+        const updatePayload = {
+          name: editCamera.name,
+          rtsp_url: editCamera.rtsp_url,
+          location: editCamera.location,
+          is_active: editCamera.is_active, // Explicitly include is_active
+          person_detection_enabled: editCamera.person_detection_enabled,
+        }
+        console.log('Updating camera with payload:', updatePayload)
+        await apiClient.put(`/api/v1/cameras/${editCamera.id}`, updatePayload)
         toast({
           title: "Success",
           description: "Camera updated successfully",
@@ -222,6 +231,7 @@ export default function CameraSettings() {
         setIsEditDialogOpen(false)
         fetchCameras()
       } catch (error) {
+        console.error('Error updating camera:', error)
         toast({
           title: "Error",
           description: "Failed to update camera",

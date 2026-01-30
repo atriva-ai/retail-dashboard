@@ -9,6 +9,9 @@ export interface Settings {
   store_theme: string
   store_notifications_enabled: boolean
   store_analytics_enabled: boolean
+  // AI Inference settings
+  ai_inference_fps?: number
+  person_detection_enabled_by_default?: boolean
 }
 
 // Create a global state for settings
